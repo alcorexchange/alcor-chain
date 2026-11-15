@@ -8,11 +8,16 @@ std::ostream& boost_test_print_type(std::ostream& os, const time_point& t) { ret
 std::ostream& boost_test_print_type(std::ostream& os, const std::optional<time_point>& t) { return os << (t ? t->to_iso_string() : "null"); }
 } // namespace fc
 
-static_assert(eosio::chain::config::block_interval_ms == 500);
+// alcor-chain: written for any block interval (upstream asserted 500 ms). Steps are multiples of
+// gap = block_interval - cpu_effort (100 ms at 500, 40 ms at 200); dates are after the 2025 epoch
+// and their expected values were recomputed with the same formulas for 200 ms.
+static_assert(eosio::chain::config::block_interval_ms == 200);
 
 constexpr auto       block_interval = fc::microseconds(eosio::chain::config::block_interval_us);
-constexpr auto       cpu_effort_us  = 400000;
+constexpr auto       cpu_effort_us  = eosio::chain::config::block_interval_us * 4 / 5;
 constexpr auto       cpu_effort     = fc::microseconds(cpu_effort_us);
+constexpr auto       gap            = block_interval - cpu_effort;
+constexpr auto       gaps           = [](int n) { return fc::microseconds(gap.count() * n); };
 constexpr auto       production_round_1st_block_slot = 100 * eosio::chain::config::producer_repetitions;
 
 
@@ -36,13 +41,13 @@ BOOST_AUTO_TEST_CASE(test_calculate_block_deadline) {
 
    {
       // Scenario 1:
-      // In producing mode, the deadline of a block will be ahead of its block_time from 100, 200, 300, ...ms,
+      // In producing mode, the deadline of a block will be ahead of its block_time by 1, 2, 3, ... gaps,
       // depending on the its index to the starting block of a production round. These deadlines are referred
       // as optimized deadlines.
       fc::mock_time_traits::set_now(production_round_1st_block_time - block_interval + fc::milliseconds(10));
       for (int i = 0; i < eosio::chain::config::producer_repetitions; ++i) {
          auto block_time        = eosio::chain::block_timestamp_type(production_round_1st_block_slot + i);
-         auto expected_deadline = block_time.to_time_point() - fc::milliseconds((i + 1) * 100);
+         auto expected_deadline = block_time.to_time_point() - gaps(i + 1);
          BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, block_time),
                            expected_deadline);
          fc::mock_time_traits::set_now(expected_deadline);
@@ -55,74 +60,74 @@ BOOST_AUTO_TEST_CASE(test_calculate_block_deadline) {
       // now is not taken into account, but leaving set_now in to verify it has no affect.
 
       auto second_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 1);
-      fc::mock_time_traits::set_now(second_block_time.to_time_point() - fc::milliseconds(200));
-      auto second_block_hard_deadline = second_block_time.to_time_point() - fc::milliseconds(200);
+      fc::mock_time_traits::set_now(second_block_time.to_time_point() - gaps(2));
+      auto second_block_hard_deadline = second_block_time.to_time_point() - gaps(2);
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, second_block_time),
                         second_block_hard_deadline);
       // use previous deadline as now
       fc::mock_time_traits::set_now(second_block_hard_deadline);
       auto third_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 2);
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, third_block_time),
-                        third_block_time.to_time_point() - fc::milliseconds(300));
+                        third_block_time.to_time_point() - gaps(3));
 
       // use previous deadline as now
-      fc::mock_time_traits::set_now(third_block_time.to_time_point() - fc::milliseconds(300));
+      fc::mock_time_traits::set_now(third_block_time.to_time_point() - gaps(3));
       auto forth_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 3);
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, forth_block_time),
-                        forth_block_time.to_time_point() - fc::milliseconds(400));
+                        forth_block_time.to_time_point() - gaps(4));
 
       ///////////////////////////////////////////////////////////////////////////////////////////////////
 
       auto seventh_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 6);
-      fc::mock_time_traits::set_now(seventh_block_time.to_time_point() - fc::milliseconds(500));
+      fc::mock_time_traits::set_now(seventh_block_time.to_time_point() - gaps(5));
 
-      // 7th block where cpu effort is 100ms less per block
+      // 7th block where cpu effort is one gap less per block
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, seventh_block_time),
-                        seventh_block_time.to_time_point() - fc::milliseconds(700));
+                        seventh_block_time.to_time_point() - gaps(7));
 
       // use previous deadline as now
-      fc::mock_time_traits::set_now(seventh_block_time.to_time_point() - fc::milliseconds(100));
+      fc::mock_time_traits::set_now(seventh_block_time.to_time_point() - gaps(1));
       auto eighth_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 7);
 
-      // 8th block where cpu effort is 100ms less per block
+      // 8th block where cpu effort is one gap less per block
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, eighth_block_time),
-                        eighth_block_time.to_time_point() - fc::milliseconds(800));
+                        eighth_block_time.to_time_point() - gaps(8));
 
       // use previous deadline as now
-      fc::mock_time_traits::set_now(eighth_block_time.to_time_point() - fc::milliseconds(200));
+      fc::mock_time_traits::set_now(eighth_block_time.to_time_point() - gaps(2));
       auto ninth_block_time = eosio::chain::block_timestamp_type(production_round_1st_block_slot + 8);
 
-      // 9th block where cpu effort is 100ms less per block
+      // 9th block where cpu effort is one gap less per block
       BOOST_CHECK_EQUAL(calculate_producing_block_deadline(cpu_effort, ninth_block_time),
-                        ninth_block_time.to_time_point() - fc::milliseconds(900));
+                        ninth_block_time.to_time_point() - gaps(9));
    }
    {
       // Scenario: time has passed for block to be produced
       // Ask for a deadline for current block but its deadline has already passed
-      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 462,500
-      // with the default_cpu_effort, the first block deadline would be 29.9625 (29.500 + 0.4625)
-      fc::mock_time_traits::set_now(fc::time_point::from_iso_string("2023-10-29T13:40:29.963")); // past first block interval
-      auto first_block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2023-10-29T13:40:30.000"));
+      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 162,500 at 200 ms
+      // with the default_cpu_effort, the first block deadline would be 35.9625 (35.800 + 0.1625)
+      fc::mock_time_traits::set_now(fc::time_point::from_iso_string("2026-11-15T13:40:35.963")); // past first block interval
+      auto first_block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2026-11-15T13:40:36.000"));
       // pass the first block deadline
       fc::time_point block_deadline = calculate_producing_block_deadline(default_cpu_effort, first_block_time);
-      // not equal since block_deadline is 29.962500
-      BOOST_CHECK_NE(block_deadline, fc::time_point::from_iso_string("2023-10-29T13:40:29.962"));
-      BOOST_CHECK_EQUAL(block_deadline.to_iso_string(), fc::time_point::from_iso_string("2023-10-29T13:40:29.962").to_iso_string()); // truncates
+      // not equal since block_deadline is 35.962500
+      BOOST_CHECK_NE(block_deadline, fc::time_point::from_iso_string("2026-11-15T13:40:35.962"));
+      BOOST_CHECK_EQUAL(block_deadline.to_iso_string(), fc::time_point::from_iso_string("2026-11-15T13:40:35.962").to_iso_string()); // truncates
 
       // second block has passed
-      fc::mock_time_traits::set_now(fc::time_point::from_iso_string("2023-10-29T13:40:30.426")); // past second block interval
-      auto second_block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2023-10-29T13:40:30.500"));
+      fc::mock_time_traits::set_now(fc::time_point::from_iso_string("2026-11-15T13:40:36.126")); // past second block interval
+      auto second_block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2026-11-15T13:40:36.200"));
       // pass the second block deadline
       block_deadline = calculate_producing_block_deadline(default_cpu_effort, second_block_time);
-      // 29.962500 + (450000/12) = 30.425
-      BOOST_CHECK_EQUAL(block_deadline, fc::time_point::from_iso_string("2023-10-29T13:40:30.425"));
+      // 35.962500 + 0.1625 = 36.125
+      BOOST_CHECK_EQUAL(block_deadline, fc::time_point::from_iso_string("2026-11-15T13:40:36.125"));
    }
    {
       // Real scenario that caused multiple start blocks
-      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 462,500
-      auto block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2023-10-31T13:37:35.000"));
+      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 162,500 at 200 ms
+      auto block_time = eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2026-11-15T13:37:38.000"));
       fc::time_point block_deadline = calculate_producing_block_deadline(default_cpu_effort, block_time);
-      BOOST_CHECK_EQUAL(block_deadline.to_iso_string(), fc::time_point::from_iso_string("2023-10-31T13:37:34.587").to_iso_string());
+      BOOST_CHECK_EQUAL(block_deadline.to_iso_string(), fc::time_point::from_iso_string("2026-11-15T13:37:37.587").to_iso_string());
    }
 }
 
@@ -292,11 +297,11 @@ BOOST_AUTO_TEST_CASE(test_calculate_producer_wake_up_time) {
               {"inith"_n}, {"initi"_n}, {"initj"_n}, {"initk"_n}, {"initl"_n}, {"initm"_n}, {"initn"_n},
               {"inito"_n}, {"initp"_n}, {"initq"_n}, {"initr"_n}, {"inits"_n}, {"initt"_n}, {"initu"_n}
       };
-      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 462,500
-      auto wake_time = calculate_producer_wake_up_time(default_cpu_effort, 106022362, eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2023-10-31T16:06:41.000")),
+      auto default_cpu_effort = fc::microseconds(block_interval.count() - (450000/12)); // 162,500 at 200 ms
+      auto wake_time = calculate_producer_wake_up_time(default_cpu_effort, 106022362, eosio::chain::block_timestamp_type(fc::time_point::from_iso_string("2026-11-15T16:06:50.000")),
                                                        producers, active_schedule, prod_watermarks);
       BOOST_REQUIRE(!!wake_time);
-      BOOST_CHECK_EQUAL(wake_time->to_iso_string(), fc::time_point::from_iso_string("2023-10-31T16:06:40.587").to_iso_string());
+      BOOST_CHECK_EQUAL(wake_time->to_iso_string(), fc::time_point::from_iso_string("2026-11-15T16:06:49.587").to_iso_string());
    }
 
 }
