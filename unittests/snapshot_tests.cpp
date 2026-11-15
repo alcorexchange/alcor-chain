@@ -391,7 +391,11 @@ void compatible_versions_test()
    std::string current_version = "v8";
 
    int ordinal = 0;
-   for(std::string version : {"v2", "v3", "v4", "v5", "v6", "v8"}) // v7 version not supported in Spring 1.0.1 and above
+   // alcor-chain: only the current format. snap_v2..snap_v6 were written by EOSIO 1.8 .. Leap 4 against the
+   // upstream blocks.log (500 ms slots, 2000 epoch); they cannot be replayed against blocks from our chain and
+   // cannot be regenerated (Spring writes only the current version). Our chain never ran those versions, so
+   // there is nothing to upgrade from. The files stay: spring_util_snapshot_info_test still parses them.
+   for(std::string version : {"v8"}) // upstream: {"v2", "v3", "v4", "v5", "v6", "v8"}; v7 not supported in Spring 1.0.1 and above
    {
       if(save_snapshot && version == current_version) continue;
       static_assert(chain_snapshot_header::minimum_compatible_version <= 2, "version 2 unit test is no longer needed.  Please clean up data files");
@@ -415,7 +419,8 @@ void compatible_versions_test()
    // Process for supporting a new snapshot version in this test:
    // ----------------------------------------------------------
    // 1. update `current_version` and the list of versions in `for` loop
-   // 2. run: `unittests/unit_test -t "snapshot_tests/test_com*" -- --save-snapshot` to generate new snapshot files
+   // 2. run: `unittests/unit_test -t "snapshot_part2_tests/test_com*" -- --save-snapshot` to generate new snapshot files
+   //    (alcor-chain: add `--generate-snapshot-log` to also regenerate unittests/snapshots/blocks.log and blocks.index)
    // 3. copy the newly generated files (see `ls -lrth ./unittests/snapshots/snap_*` to `spring/unittests/snapshots`
    //    for example `cp ./unittests/snapshots/snap_v8.* ../unittests/snapshots`
    // 4. edit `unittests/snapshots/CMakeLists.txt` and add the `configure_file` commands for the 3 new files.
@@ -497,6 +502,12 @@ void pending_schedule_snapshot_test()
    verify_integrity_hash<SNAPSHOT_SUITE>(*blockslog_chain.control, *latest_chain.control);
 }
 
+// alcor-chain: disabled. The data (prod_sched/blocks.log + snap_v2_prod_sched.*) is an EOSIO 1.8.x chain with
+// 500 ms slots from the 2000 epoch, saved to check the 1.8 -> 2.0 (WTMSIG) upgrade without replay. It cannot be
+// replayed with our block interval and epoch, and cannot be regenerated: Spring cannot write a v2 snapshot.
+// Our chain has no 1.8 history to upgrade from, so the case does not apply. (If an in-flight schedule change in
+// the current format is wanted, port the generator in snapshots/prod_sched/snapshot_tests.cpp.diff.)
+BOOST_TEST_DECORATOR(* boost::unit_test::disabled())
 BOOST_AUTO_TEST_CASE_TEMPLATE(test_pending_schedule_snapshot, SNAPSHOT_SUITE, snapshot_suites)
 {
    pending_schedule_snapshot_test<legacy_tester, SNAPSHOT_SUITE>();

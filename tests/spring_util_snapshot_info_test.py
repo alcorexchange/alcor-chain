@@ -10,6 +10,11 @@ from TestHarness import Utils
 Print=Utils.Print
 testSuccessful=False
 
+# alcor-chain: snap_v2..snap_v6 are upstream files (500 ms slots from the 2000 epoch). Their head block is
+# slot 1262304002 (2020-01-01T00:00:01 upstream), which this chain reads as 2025-01-01 + 1262304002 * 200 ms
+# = 2033-01-01T00:00:00.400. chain_id and head_block_id are stored as is.
+# snap_v8 is regenerated on this chain; its values come from
+# `spring-util snapshot info` on the regenerated file.
 expected_results = [
     {
         "file": "unittests/snapshots/snap_v2.bin.gz",
@@ -18,7 +23,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
     {
@@ -28,7 +33,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
     {
@@ -38,7 +43,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
     {
@@ -48,7 +53,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
     {
@@ -58,9 +63,10 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
+    # alcor-chain: values of the upstream snap_v8; replace all four after regenerating snap_v8
     {
         "file": "unittests/snapshots/snap_v8.bin.gz",
         "result": {
@@ -68,7 +74,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2020-01-01T00:00:01.000"
+            "head_block_time": "2033-01-01T00:00:00.400"
         }
     }
 ]
