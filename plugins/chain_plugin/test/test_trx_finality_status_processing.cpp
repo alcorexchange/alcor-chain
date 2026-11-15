@@ -914,7 +914,11 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    const uint64_t max_storage = 10'000;
    trx_finality_status_processing status(max_storage, max_success_duration, max_failure_duration);
 
-   block_frame b_01(status, "04:44:00.500", 1);
+   // alcor-chain: block times on whole seconds (upstream: xx.500). make_block stamps now() as a block timestamp,
+   // which rounds down to a slot: xx.500 is a 500 ms slot but not a 200 ms one (-> xx.400). Storage reduction
+   // drops speculative trxs received up to the removed block's timestamp, so with xx.400 block 2's speculative
+   // trxs (received at xx.500) stayed. Whole seconds are slots at any interval dividing 1000 ms.
+   block_frame b_01(status, "04:44:01.000", 1);
    b_01.send_spec_block();
    b_01.verify_spec_block();
 
@@ -927,7 +931,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    BOOST_REQUIRE(max_storage / 12 < block_and_speculative_size);
 
 
-   block_frame b_02(status, "04:44:01.500");
+   block_frame b_02(status, "04:44:02.000");
    b_02.send_spec_block();
    b_02.verify_spec_block();
 
@@ -935,7 +939,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_02.verify_block();
 
 
-   block_frame b_03(status, "04:44:02.500");
+   block_frame b_03(status, "04:44:03.000");
    b_03.send_spec_block();
    b_03.verify_spec_block();
 
@@ -943,7 +947,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_03.verify_block();
 
 
-   block_frame b_04(status, "04:44:03.500");
+   block_frame b_04(status, "04:44:04.000");
    b_04.send_spec_block();
    b_04.verify_spec_block();
 
@@ -951,7 +955,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_04.verify_block();
 
 
-   block_frame b_05(status, "04:44:04.500");
+   block_frame b_05(status, "04:44:05.000");
    b_05.send_spec_block();
    b_05.verify_spec_block();
 
@@ -959,7 +963,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_05.verify_block();
 
 
-   block_frame b_06(status, "04:44:05.500");
+   block_frame b_06(status, "04:44:06.000");
    b_06.send_spec_block();
    b_06.verify_spec_block();
 
@@ -967,7 +971,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_06.verify_block();
 
 
-   block_frame b_07(status, "04:44:06.500");
+   block_frame b_07(status, "04:44:07.000");
    b_07.send_spec_block();
    b_07.verify_spec_block();
 
@@ -975,7 +979,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_07.verify_block();
 
 
-   block_frame b_08(status, "04:44:07.500");
+   block_frame b_08(status, "04:44:08.000");
    b_08.send_spec_block();
    b_08.verify_spec_block();
 
@@ -983,7 +987,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_08.verify_block();
 
 
-   block_frame b_09(status, "04:44:08.500");
+   block_frame b_09(status, "04:44:09.000");
    b_09.send_spec_block();
    b_09.verify_spec_block();
 
@@ -991,7 +995,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_09.verify_block();
 
 
-   block_frame b_10(status, "04:44:09.500");
+   block_frame b_10(status, "04:44:10.000");
    b_10.send_spec_block();
    b_10.verify_spec_block();
 
@@ -999,7 +1003,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    b_10.verify_block();
 
 
-   block_frame b_11(status, "04:44:10.500");
+   block_frame b_11(status, "04:44:11.000");
    b_11.send_spec_block();
    b_11.verify_spec_block();
 
@@ -1018,7 +1022,7 @@ BOOST_AUTO_TEST_CASE(trx_finality_status_storage_reduction) { try {
    BOOST_REQUIRE(status.get_storage_memory_size() + block_and_speculative_size > max_storage);
 
 
-   block_frame b_12(status, "04:44:11.500");
+   block_frame b_12(status, "04:44:12.000");
    b_12.send_spec_block();
    b_12.verify_spec_block();
 
