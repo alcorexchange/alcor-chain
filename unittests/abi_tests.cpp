@@ -3160,6 +3160,7 @@ inline std::pair<action_trace, std::string> generate_action_trace(const std::opt
    at.trx_id = transaction_id_type{"5d039021cf3262c5036a6ad40a809ae1440ae6c6792a48e6e95abf083b108d5f"};
    at.block_num = 4;
    at.block_time = block_timestamp_type{5};
+   static_assert(config::block_timestamp_epoch == 1735689600000ll && config::block_interval_ms == 200, "alcor-chain: expected block_time below assumes the 2025 epoch and 200 ms slots");
    at.producer_block_id = std::optional<block_id_type>{};
    if (return_value) {
       at.return_value = fc::raw::pack(*return_value);
@@ -3188,7 +3189,7 @@ inline std::pair<action_trace, std::string> generate_action_trace(const std::opt
       <<         "\"console\":\"console line\","
       <<         "\"trx_id\":\"5d039021cf3262c5036a6ad40a809ae1440ae6c6792a48e6e95abf083b108d5f\","
       <<         "\"block_num\":4,"
-      <<         "\"block_time\":\"2000-01-01T00:00:02.500\","
+      <<         "\"block_time\":\"2025-01-01T00:00:01.000\"," // slot 5: 2025-01-01 epoch + 5 * 200 ms (upstream: 2000-01-01 + 5 * 500 ms = 00:00:02.500)
       <<         "\"producer_block_id\":null,"
       <<         "\"account_ram_deltas\":[],"
       <<         "\"except\":null,"
