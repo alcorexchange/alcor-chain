@@ -99,7 +99,7 @@ BOOST_FIXTURE_TEST_CASE( verify_producer_schedule_after_savanna_activation, lega
 
    // ---- Test deliberately miss some blocks ----
    const int64_t num_of_missed_blocks = 5000;
-   produce_block(fc::microseconds(500 * 1000 * num_of_missed_blocks));
+   produce_block(fc::microseconds(config::block_interval_us * num_of_missed_blocks)); // upstream: 500 * 1000
    // Ensure schedule is still correct
    confirm_schedule_correctness(second_prod_schd, 2);
    produce_block();

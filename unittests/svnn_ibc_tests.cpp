@@ -658,7 +658,9 @@ BOOST_AUTO_TEST_SUITE(svnn_ibc)
       cluster.node0.push_action("ibc"_n, "checkproof"_n, "ibc"_n, light_proof_1);
       
       BOOST_CHECK(true); 
-      cluster.produce_blocks(10); //advance 5 seconds
+      // advance 5 seconds = the ibc contract's PROOF_CACHE_EXPIRY (upstream: 10 blocks * 500 ms);
+      // 5000 ms / 200 ms = 25 blocks
+      cluster.produce_blocks(5 * 1000 / config::block_interval_ms);
 
       // the root is still cached when performing this action, so the action succeeds.
       // However, it also triggers garbage collection,removing the old proven root for block #2,
