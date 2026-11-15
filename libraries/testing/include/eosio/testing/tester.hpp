@@ -176,6 +176,13 @@ namespace eosio::testing {
          static const fc::microseconds abi_serializer_max_time;
          static constexpr fc::microseconds default_skip_time = fc::milliseconds(config::block_interval_ms);
 
+         // alcor-chain: upstream's genesis 2020-01-01 is before our 2025 epoch and wraps around in
+         // block_timestamp (to 2033-01-24, slot 1272320302; 1272320302 % 12 = 10, so even the
+         // producer rotation was shifted). Keep upstream's genesis slot instead: 2020-01-01 is slot
+         // 1262304000 at 500 ms from 2000, so slot-based rotation (slot / producer_repetitions)
+         // lines up exactly as upstream. At 200 ms from 2025 this slot is 2033-01-01T00:00:00.000.
+         static constexpr uint32_t default_genesis_slot = 1262304000;
+
          virtual ~base_tester() {}
          base_tester() = default;
          base_tester(base_tester&&) = default;
@@ -480,7 +487,7 @@ namespace eosio::testing {
 
          static genesis_state default_genesis() {
             genesis_state genesis;
-            genesis.initial_timestamp = fc::time_point::from_iso_string("2020-01-01T00:00:00.000");
+            genesis.initial_timestamp = block_timestamp_type(default_genesis_slot);
             genesis.initial_key = get_public_key( config::system_account_name, "active" );
 
             return genesis;
