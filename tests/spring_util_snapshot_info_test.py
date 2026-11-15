@@ -66,7 +66,9 @@ expected_results = [
             "head_block_time": "2033-01-01T00:00:00.400"
         }
     },
-    # alcor-chain: values of the upstream snap_v8; replace all four after regenerating snap_v8
+    # alcor-chain: snap_v8 regenerated on this chain (200 ms, 2025 epoch). Head block 3 = tester genesis slot
+    # 86088960 + 2 = 2025-07-19T06:43:12.400. chain_id and head_block_id: TO REPLACE with `spring-util snapshot info`
+    # output after regenerating snap_v8 for the new tester genesis (these are from upstream snap_v8).
     {
         "file": "unittests/snapshots/snap_v8.bin.gz",
         "result": {
@@ -74,7 +76,7 @@ expected_results = [
             "chain_id": "90d8c7436017001e64891e8b6b7eb0060baeb350048eb52d2cdb594fdbc2617d",
             "head_block_id": "00000003ad205c959e2af857e2cc621d00a63c3df2b82d38392d5dd162b1c511",
             "head_block_num": 3,
-            "head_block_time": "2033-01-01T00:00:00.400"
+            "head_block_time": "2025-07-19T06:43:12.400"
         }
     }
 ]

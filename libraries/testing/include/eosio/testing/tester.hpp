@@ -176,12 +176,17 @@ namespace eosio::testing {
          static const fc::microseconds abi_serializer_max_time;
          static constexpr fc::microseconds default_skip_time = fc::milliseconds(config::block_interval_ms);
 
-         // alcor-chain: upstream's genesis 2020-01-01 is before our 2025 epoch and wraps around in
-         // block_timestamp (to 2033-01-24, slot 1272320302; 1272320302 % 12 = 10, so even the
-         // producer rotation was shifted). Keep upstream's genesis slot instead: 2020-01-01 is slot
-         // 1262304000 at 500 ms from 2000, so slot-based rotation (slot / producer_repetitions)
-         // lines up exactly as upstream. At 200 ms from 2025 this slot is 2033-01-01T00:00:00.000.
-         static constexpr uint32_t default_genesis_slot = 1262304000;
+         // alcor-chain: upstream's tester genesis 2020-01-01 is before our 2025 epoch. Two things about it matter:
+         // - slot alignment: upstream's genesis slot is 1262304000 (500 ms from 2000); rotation is
+         //   (slot / producer_repetitions) % n and Savanna rounds start at slot % 12 == 0;
+         // - it is in the past of wall-clock time: block_state::is_recent() (timestamp > now - 30 s) is then never
+         //   true, so finalizers vote only when testing_allow_voting says so (tests that withhold votes to build
+         //   forks rely on this; a genesis in the future, e.g. 2033, makes every block "recent" and always voted).
+         // So: the smallest slot with the same slot / 12 as upstream modulo lcm(1..18) = 12252240, which keeps
+         // the rotation of n = 1..18, 20, 21, 22, 24, 26, 28, 30 producers identical to upstream:
+         // 12 * (105192000 % 12252240) = 12 * 7174080 = 86088960. At 200 ms from 2025 that is
+         // 2025-07-19T06:43:12.000 (2026-05-14T04:48:00 at 500 ms): after the epoch and in the past.
+         static constexpr uint32_t default_genesis_slot = 86088960;
 
          virtual ~base_tester() {}
          base_tester() = default;
