@@ -322,7 +322,8 @@ BOOST_AUTO_TEST_SUITE(resource_limits_test)
       int64_t  total_staked_tokens = 1'000'000'000'0000ll;
       int64_t  user_stake = 1'0000ll;
       uint64_t max_block_cpu = 200'000.; // us;
-      uint64_t blocks_per_day = 2*60*60*24;
+      // alcor-chain: the account window is a day in blocks (upstream hardcoded 2 blocks per second)
+      uint64_t blocks_per_day = config::account_cpu_usage_average_window_ms / config::block_interval_ms;
       uint64_t total_cpu_per_period = max_block_cpu * blocks_per_day;
 
       double congested_cpu_time_per_period = (double(total_cpu_per_period) * user_stake) / total_staked_tokens;
@@ -336,14 +337,18 @@ BOOST_AUTO_TEST_SUITE(resource_limits_test)
       set_account_limits( "everyone"_n, 0, 0, (total_staked_tokens - user_stake), false );
       process_account_limit_updates();
 
-      // dan cannot consume more than 34 us per day
-      BOOST_REQUIRE_THROW( add_transaction_usage( {"dan"_n}, 35, 0, 1 ), tx_cpu_usage_exceeded );
+      // dan's daily cpu is the floor of his share of the day's capacity:
+      // 200'000 us * blocks_per_day * 1'0000 / 1'000'000'000'0000 -> 34 us at 500 ms (172'800 blocks), 86 us at 200 ms (432'000 blocks)
+      const int64_t dan_max_cpu_us = int64_t(congested_cpu_time_per_period);
+
+      // dan cannot consume more than dan_max_cpu_us per day
+      BOOST_REQUIRE_THROW( add_transaction_usage( {"dan"_n}, dan_max_cpu_us + 1, 0, 1 ), tx_cpu_usage_exceeded );
 
       // Ensure CPU usage is 0 by "waiting" for one day's worth of blocks to pass.
       add_transaction_usage( {"dan"_n}, 0, 0, 1 + blocks_per_day );
 
-      // But dan should be able to consume up to 34 us per day.
-      add_transaction_usage( {"dan"_n}, 34, 0, 2 + blocks_per_day );
+      // But dan should be able to consume up to dan_max_cpu_us per day.
+      add_transaction_usage( {"dan"_n}, dan_max_cpu_us, 0, 2 + blocks_per_day );
    } FC_LOG_AND_RETHROW()
 
    /**

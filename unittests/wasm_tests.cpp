@@ -2076,11 +2076,15 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( billed_cpu_test, T, testers ) try {
    BOOST_CHECK_EXCEPTION( push_trx( ptrx, fc::time_point::maximum(), min_cpu_time_us - 1, true, 0 ), transaction_exception,
                           fc_exception_message_starts_with("cannot bill CPU time less than the minimum") );
 
+   // alcor-chain: an account's cpu limit is its share of virtual_cpu_limit * window, the window being a day in blocks.
+   // Upstream's weight 75 gave ~130 ms at 500 ms (172'800 blocks); the window is 500 / block_interval_ms times longer
+   // now (432'000 blocks at 200 ms), so the weight is scaled down by the same factor (30 at 200 ms) to keep ~130 ms.
+   constexpr int64_t small_weight = 75 * config::block_interval_ms / 500;
    chain.push_action( config::system_account_name, "setalimits"_n, config::system_account_name, fc::mutable_variant_object()
          ("account", acc)
          ("ram_bytes", -1)
-         ("net_weight", 75)
-         ("cpu_weight", 75) // ~130ms
+         ("net_weight", small_weight)
+         ("cpu_weight", small_weight) // ~130ms
    );
 
    chain.produce_block();
@@ -2157,7 +2161,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( billed_cpu_test, T, testers ) try {
    chain.push_action( config::system_account_name, "setalimits"_n, config::system_account_name, fc::mutable_variant_object()
            ("account", acc)
            ("ram_bytes", -1)
-           ("net_weight", 75)
+           ("net_weight", small_weight)
            ("cpu_weight", 0)
    );
 

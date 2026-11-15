@@ -736,10 +736,15 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
    cfg.max_transaction_net_usage  = 64 * 1024;
 
    cfg.max_block_cpu_usage        = 150'000; // maximum of 150 ms of CPU per block
-   cfg.target_block_cpu_usage_pct = config::percent_1/10; // More than 150 us of CPU to keep the block above the target.
+   // alcor-chain: upstream 0.1% (150 us). Empty blocks (onblock, 100 us) decay the CPU average towards 100 us, so with
+   // 150 us it falls below target ~0.9 windows later than NET does; at 300 blocks per window that is ~264 blocks of
+   // NET-only growth (1.3x), too much for both to land in the bands checked below. 0.15% (225 us) makes the CPU and NET
+   // averages cross their targets within ~0.04 windows of each other: congested blocks (onblock + 2 trxs, 300 us) are
+   // above it, empty blocks below.
+   cfg.target_block_cpu_usage_pct = config::percent_1*15/100; // More than 225 us of CPU to keep the block above the target.
    cfg.max_transaction_cpu_usage  = 50'000;
    cfg.min_transaction_cpu_usage  = 100; // Empty blocks (consisting of only onblock) would be below the target.
-   // But all it takes is one transaction in the block to be above the target.
+   // But two transactions in the block (as in the congestion loop below) put it above the target.
 
    T c( conf_genesis.first, conf_genesis.second );
    c.execute_setup_policy( setup_policy::full );
@@ -748,6 +753,12 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
 
    const auto& user_account  = "user"_n;
    const auto& other_account = "other"_n;
+
+   // alcor-chain: the user's daily share is virtual limit * blocks per day * 1 / total weight. Upstream used a total
+   // weight of 250'000'000 at 172'800 blocks per day (500 ms); the total is scaled by 500 / block_interval_ms
+   // (625'000'000 at 200 ms, 432'000 blocks per day) so the per-day amounts stay 103 us and 90 bytes:
+   // 150'000 * 432'000 / 625'000'000 = 103.68 -> 103, 131'072 * 432'000 / 625'000'000 = 90.59 -> 90 (as upstream).
+   const int64_t total_weight = 250'000'000ll * 500 / config::block_interval_ms;
 
    c.create_accounts( {user_account, other_account} );
 
@@ -761,8 +772,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
    c.push_action( config::system_account_name, "setalimits"_n, config::system_account_name, fc::mutable_variant_object()
       ("account", other_account)
       ("ram_bytes", -1)
-      ("net_weight", 249'999'999)
-      ("cpu_weight", 249'999'999)
+      ("net_weight", total_weight - 1)
+      ("cpu_weight", total_weight - 1)
    );
 
    const int64_t reqauth_net_charge = 104;
@@ -779,8 +790,11 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
    };
 
    // Force contraction of elastic resources until fully congested.
+   // alcor-chain: the block averages are over 60 s, 300 blocks at 200 ms vs 120 at 500 ms, so the average needs
+   // 2.5x more blocks to rise above target; congest for the same 2.5 windows as upstream (300 blocks at 500 ms).
+   const size_t congest_blocks = 300 * 500 / config::block_interval_ms;
    c.produce_block();
-   for( size_t i = 0; i < 300; ++i ) {
+   for( size_t i = 0; i < congest_blocks; ++i ) {
       push_reqauth( other_account, config::active_name, cfg.min_transaction_cpu_usage );
       push_reqauth( other_account, config::owner_name, cfg.min_transaction_cpu_usage );
       c.produce_block();
@@ -789,10 +803,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
    BOOST_REQUIRE_EQUAL( rm.get_virtual_block_cpu_limit(), cfg.max_block_cpu_usage );
    BOOST_REQUIRE_EQUAL( rm.get_virtual_block_net_limit(), cfg.max_block_net_usage );
 
-   uint64_t blocks_per_day = 2*60*60*24;
+   uint64_t blocks_per_day = config::account_cpu_usage_average_window_ms / config::block_interval_ms;
 
-   int64_t user_cpu_per_day = (cfg.max_block_cpu_usage * blocks_per_day / 250'000'000); // 103 us
-   int64_t user_net_per_day = (cfg.max_block_net_usage * blocks_per_day / 250'000'000); // 90 bytes
+   int64_t user_cpu_per_day = (cfg.max_block_cpu_usage * blocks_per_day / total_weight); // 103 us
+   int64_t user_net_per_day = (cfg.max_block_net_usage * blocks_per_day / total_weight); // 90 bytes
    wdump((user_cpu_per_day)(user_net_per_day));
 
    BOOST_REQUIRE_EQUAL( rm.get_account_cpu_limit_ex(user_account).first.max, user_cpu_per_day );
@@ -810,7 +824,17 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( greylist_limit_tests, T, testers ) { try {
    wdump((rm.get_account_net_limit(user_account).first));
 
    // Allow congestion to reduce a little bit.
-   c.produce_blocks(1400, true);
+   // alcor-chain: upstream produced 1400 empty blocks. A virtual limit starts growing (x1000/999 per block, whatever the
+   // interval) only once its average falls below target, which takes a number of blocks proportional to the 60 s
+   // window (300 blocks at 200 ms vs 120 at 500 ms). So: empty blocks until both limits grow (~46 at 500 ms, ~113 at
+   // 200 ms), then a fixed 1300 blocks of growth: 1.001^1300 = ~3.7x for both, inside the bands the checks below need
+   // (NET 3.44x..4x: 3 < x < 4 and 3*104 < 90.6*x < 4*104 bytes; CPU 3x..4x for greylist limits 3 and 4).
+   for( uint32_t i = 0; rm.get_virtual_block_net_limit() == cfg.max_block_net_usage ||
+                        rm.get_virtual_block_cpu_limit() == cfg.max_block_cpu_usage; ++i ) {
+      BOOST_REQUIRE( i < blocks_per_day ); // the averages must fall below target well within a day
+      c.produce_empty_block();
+   }
+   c.produce_blocks(1300, true);
 
    BOOST_REQUIRE( rm.get_virtual_block_net_limit() > (3*cfg.max_block_net_usage) );
    BOOST_REQUIRE( rm.get_virtual_block_net_limit() < (4*cfg.max_block_net_usage) );
