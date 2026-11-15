@@ -274,7 +274,7 @@ class Cluster(object):
         if Utils.Debug and "--contracts-console" not in extraNodeosArgs:
             nodeosArgs += " --contracts-console"
         if PFSetupPolicy.hasPreactivateFeature(pfSetupPolicy):
-            nodeosArgs += " --plugin eosio::producer_api_plugin"
+            nodeosArgs += " --plugin eosio::producer_api_plugin "
         if prodsEnableTraceApi:
             nodeosArgs += " --plugin eosio::trace_api_plugin "
         if extraNodeosArgs.find("--trace-rpc-abi") == -1:
