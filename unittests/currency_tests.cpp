@@ -440,8 +440,6 @@ BOOST_FIXTURE_TEST_CASE( test_proxy_deferred, pre_disable_deferred_trx_currency_
       BOOST_REQUIRE_EQUAL(true, chain_has_transaction(trx.id()));
    }
 
-   // for now wasm "time" is in seconds, so we have to truncate off any parts of a second that may have applied
-   fc::time_point expected_delivery(fc::seconds(head().block_time().sec_since_epoch()) + fc::seconds(10));
    {
       auto trace = push_action("eosio.token"_n, "transfer"_n, mutable_variant_object()
          ("from", eosio_token)
@@ -450,8 +448,13 @@ BOOST_FIXTURE_TEST_CASE( test_proxy_deferred, pre_disable_deferred_trx_currency_
          ("memo", "fund Proxy")
       );
    }
+   // alcor-chain: the deferred transfer is due at its pending block time + 10 s (delay_until =
+   // published + delay). Upstream counted from the head time truncated to whole seconds, which is
+   // the same only when the head is on a whole second: at 500 ms that was every other block and
+   // happened to hold here; at 200 ms it is every 5th block. Same check as test_deferred_failure.
+   fc::time_point expected_delivery = control->pending_block_time() + fc::seconds(10);
 
-   while(head().block_time() < expected_delivery) {
+   while(control->pending_block_time() < expected_delivery) {
       produce_block();
       BOOST_REQUIRE_EQUAL(get_balance( "proxy"_n), asset::from_string("5.0000 CUR"));
       BOOST_REQUIRE_EQUAL(get_balance( "alice"_n),   asset::from_string("0.0000 CUR"));
