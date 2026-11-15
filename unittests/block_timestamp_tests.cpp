@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(constructor_test) {
 	constexpr int64_t epoch_s = config::block_timestamp_epoch / 1000;
 	fc::time_point t(fc::seconds(epoch_s + 31536000)); // a year after the epoch
 	block_timestamp_type bt2(t);
-	BOOST_TEST( bt2.slot == 31536000u * 1000 / config::block_interval_ms, "Time point constructor gives wrong value");
+	BOOST_TEST( bt2.slot == uint64_t(31536000) * 1000 / config::block_interval_ms, "Time point constructor gives wrong value");
 }
 
 BOOST_AUTO_TEST_CASE(conversion_test) {
