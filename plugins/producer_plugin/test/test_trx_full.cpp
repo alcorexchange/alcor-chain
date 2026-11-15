@@ -12,6 +12,8 @@
 
 #include <eosio/chain/application.hpp>
 
+#include <fc/io/json.hpp>
+
 namespace eosio::test::detail {
 using namespace eosio::chain::literals;
 struct testit {
@@ -103,7 +105,18 @@ BOOST_AUTO_TEST_CASE(producer) {
    appbase::scoped_app app;
    
    auto temp_dir_str = temp.path().string();
-   
+
+   // alcor-chain: the default genesis timestamp (2018-06-01) is before our 2025-01-01 block timestamp epoch; it
+   // wraps the u32 block slot to 2031-06-25, so the head is in the future and the producer makes no blocks. Start
+   // from a genesis in the past after the epoch, as upstream's default genesis was in the past after its 2000 epoch.
+   const auto genesis_file = temp.path() / "genesis.json";
+   {
+      genesis_state gs;
+      gs.initial_timestamp = fc::time_point::from_iso_string( "2025-06-01T12:00:00" );
+      BOOST_REQUIRE( fc::json::save_to_file( gs, genesis_file ) );
+   }
+   const auto genesis_file_str = genesis_file.string();
+
    {
       std::promise<std::tuple<producer_plugin*, chain_plugin*>> plugin_promise;
       std::future<std::tuple<producer_plugin*, chain_plugin*>> plugin_fut = plugin_promise.get_future();
@@ -112,7 +125,8 @@ BOOST_AUTO_TEST_CASE(producer) {
             fc::logger::get(DEFAULT_LOGGER).set_log_level(fc::log_level::debug);
             std::vector<const char*> argv =
                   {"test", "--data-dir", temp_dir_str.c_str(), "--config-dir", temp_dir_str.c_str(),
-                   "-p", "eosio", "-e", "--disable-subjective-p2p-billing=true" };
+                   "-p", "eosio", "-e", "--disable-subjective-p2p-billing=true",
+                   "--genesis-json", genesis_file_str.c_str() };
             app->initialize<chain_plugin, producer_plugin>( argv.size(), (char**) &argv[0] );
             app->startup();
             plugin_promise.set_value(

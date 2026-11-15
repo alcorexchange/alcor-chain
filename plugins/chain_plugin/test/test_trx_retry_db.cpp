@@ -187,7 +187,9 @@ BOOST_AUTO_TEST_CASE(trx_retry_logic) {
       }
 
       // control time by using set_now, call before spawning any threads
-      auto pnow = boost::posix_time::time_from_string("2022-04-04 4:44:44.000");
+      // alcor-chain: blocks here are stamped with now(), so now must be after the 2025-01-01 block timestamp epoch
+      // (upstream's 2022 date wraps the u32 block slot and breaks expiry by block time)
+      auto pnow = boost::posix_time::time_from_string("2026-04-04 4:44:44.000");
       fc::mock_time_traits::set_now(pnow);
 
       // run app() so that channels::transaction_ack work
