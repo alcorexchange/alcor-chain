@@ -194,7 +194,7 @@ try:
 
     # The transaction status db is purged on timeouts when blocks are processed, leeway allows small delay in blocks
     leeway=4
-    assert testNode.waitForBlock(blockNum=startingBlockNum+(successDuration*2)+leeway,timeout=successDuration+leeway)
+    assert testNode.waitForBlock(blockNum=startingBlockNum+(successDuration*1000//Utils.BlockIntervalMs)+leeway,timeout=successDuration+leeway)
 
     recentBlockNum=testNode.getBlockNum()
     retStatus=testNode.getTransactionStatus(transId)

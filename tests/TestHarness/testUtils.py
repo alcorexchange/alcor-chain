@@ -55,6 +55,8 @@ addEnum(BlockLogAction, "return_blocks")
 ###########################################################################################
 class Utils:
     Debug=False
+    # alcor-chain: chain::config::block_interval_ms (upstream tests assumed 500)
+    BlockIntervalMs=200
     FNull = open(os.devnull, 'w')
 
     testBinPath = Path(__file__).resolve().parents[2] / 'bin'

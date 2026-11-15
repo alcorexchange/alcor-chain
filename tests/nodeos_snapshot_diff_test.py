@@ -116,7 +116,7 @@ try:
     assert status is not None, "ERROR: Failed to spinup Transaction Generators"
 
     blockNum=node0.getBlockNum(BlockType.head)
-    timePerBlock=500
+    timePerBlock=Utils.BlockIntervalMs
     transactionsPerBlock=targetTpsPerGenerator*trxGeneratorCnt*timePerBlock/1000
     steadyStateWait=30
     startBlockNum=blockNum+steadyStateWait
