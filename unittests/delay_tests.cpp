@@ -16,6 +16,19 @@ using mvo = fc::mutable_variant_object;
 
 const std::string eosio_token = name("eosio.token"_n).to_string();
 
+// alcor-chain: upstream wrote "2020-01-01T00:30", 30 minutes after the tester genesis. Our tester
+// genesis is a different date (see base_tester::default_genesis_slot), so count from it.
+static fc::time_point_sec msig_trx_expiration() {
+   return fc::time_point_sec(fc::time_point(block_timestamp_type(base_tester::default_genesis_slot)) + fc::minutes(30));
+}
+
+// alcor-chain: upstream skipped literal seconds tuned for 500 ms blocks (8 s = 10 s - 4 blocks of
+// 500 ms), so that the plain blocks produced after the skip end exactly at the delay. Same thing
+// in units of the block interval, for any interval.
+static fc::microseconds delay_minus_blocks(uint32_t delay_sec, uint32_t blocks) {
+   return fc::seconds(delay_sec) - fc::milliseconds(blocks * config::block_interval_ms);
+}
+
 static void create_accounts(validating_tester& chain) {
    chain.produce_block();
    chain.create_accounts({"eosio.msig"_n, "eosio.token"_n});
@@ -61,7 +74,7 @@ static void propose_approve_msig_trx(validating_tester& chain, const name& propo
 
 static void propose_approve_msig_token_transfer_trx(validating_tester& chain, const name& proposal_name, const permission_level& perm, uint32_t delay_sec, const std::string& quantity) {
    fc::variant pretty_trx = mvo()
-      ("expiration", "2020-01-01T00:30")
+      ("expiration", msig_trx_expiration())
       ("ref_block_num", 2)
       ("ref_block_prefix", 3)
       ("max_net_usage_words", 0)
@@ -86,7 +99,7 @@ static void propose_approve_msig_token_transfer_trx(validating_tester& chain, co
 
 static void propose_approve_msig_updateauth_trx(validating_tester& chain, const name& proposal_name, const permission_level& perm, uint32_t delay_sec) {
    fc::variant pretty_trx = fc::mutable_variant_object()
-      ("expiration", "2020-01-01T00:30")
+      ("expiration", msig_trx_expiration())
       ("ref_block_num", 2)
       ("ref_block_prefix", 3)
       ("max_net_usage_words", 0)
@@ -111,7 +124,7 @@ static void propose_approve_msig_updateauth_trx(validating_tester& chain, const 
 
 static void propose_approve_msig_linkauth_trx(validating_tester& chain, const name& proposal_name, const name& requirement, const permission_level& perm, uint32_t delay_sec) {
    fc::variant pretty_trx = fc::mutable_variant_object()
-      ("expiration", "2020-01-01T00:30")
+      ("expiration", msig_trx_expiration())
       ("ref_block_num", 2)
       ("ref_block_prefix", 3)
       ("max_net_usage_words", 0)
@@ -136,7 +149,7 @@ static void propose_approve_msig_linkauth_trx(validating_tester& chain, const na
 
 static void propose_approve_msig_unlinkauth_trx(validating_tester& chain, const name& proposal_name, const permission_level& perm, uint32_t delay_sec) {
    fc::variant pretty_trx = mvo()
-      ("expiration", "2020-01-01T00:30")
+      ("expiration", msig_trx_expiration())
       ("ref_block_num", 2)
       ("ref_block_prefix", 3)
       ("max_net_usage_words", 0)
@@ -199,7 +212,7 @@ BOOST_FIXTURE_TEST_CASE( delay_error_create_account, validating_tester_no_disabl
    edump((*trace));
 
    produce_block();
-   produce_block(fc::seconds(2) + fc::milliseconds(config::block_interval_ms));
+   produce_block(fc::seconds(trx.delay_sec) - fc::milliseconds(config::block_interval_ms)); // alcor-chain: the next pending block is exactly at the 3 s delay (upstream: 2 s + 500 ms)
 
    auto scheduled_trxs = get_scheduled_transactions();
    BOOST_REQUIRE_EQUAL(scheduled_trxs.size(), 1u);
@@ -298,7 +311,7 @@ BOOST_AUTO_TEST_CASE( link_delay_direct_test ) { try {
    BOOST_REQUIRE_EQUAL(asset::from_string("1.0000 CUR"), liquid_balance);
 
    chain.produce_block();
-   chain.produce_block(fc::seconds(8));
+   chain.produce_block(delay_minus_blocks(10, 4)); // upstream: 8 s
    chain.produce_block();
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
@@ -416,7 +429,7 @@ BOOST_AUTO_TEST_CASE( link_delay_direct_parent_permission_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("1.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(14));
+   chain.produce_block(delay_minus_blocks(15, 2)); // upstream: 14 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("99.0000 CUR"), liquid_balance);
@@ -540,7 +553,7 @@ BOOST_AUTO_TEST_CASE( link_delay_direct_walk_parent_permissions_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("1.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(19));
+   chain.produce_block(delay_minus_blocks(20, 2)); // upstream: 19 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("99.0000 CUR"), liquid_balance);
@@ -640,7 +653,7 @@ BOOST_AUTO_TEST_CASE( link_delay_permission_change_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(8));
+   chain.produce_block(delay_minus_blocks(10, 4)); // upstream: 8 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("100.0000 CUR"), liquid_balance);
@@ -696,7 +709,7 @@ BOOST_AUTO_TEST_CASE( link_delay_permission_change_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("11.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
    chain.produce_block();
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
@@ -795,7 +808,7 @@ BOOST_AUTO_TEST_CASE( link_delay_permission_change_with_delay_heirarchy_test ) {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(8));
+   chain.produce_block(delay_minus_blocks(10, 4)); // upstream: 8 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("100.0000 CUR"), liquid_balance);
@@ -852,7 +865,7 @@ BOOST_AUTO_TEST_CASE( link_delay_permission_change_with_delay_heirarchy_test ) {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("11.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("89.0000 CUR"), liquid_balance);
@@ -971,7 +984,7 @@ BOOST_AUTO_TEST_CASE( link_delay_link_change_test ) { try {
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
    chain.produce_block();
-   chain.produce_block(fc::seconds(7) + fc::milliseconds(config::block_interval_ms));
+   chain.produce_block(delay_minus_blocks(10, 5)); // upstream: 7 s + 500 ms
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("100.0000 CUR"), liquid_balance);
@@ -1129,7 +1142,7 @@ BOOST_AUTO_TEST_CASE( link_delay_unlink_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(8));
+   chain.produce_block(delay_minus_blocks(10, 4)); // upstream: 8 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("100.0000 CUR"), liquid_balance);
@@ -1185,7 +1198,7 @@ BOOST_AUTO_TEST_CASE( link_delay_unlink_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("11.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
    chain.produce_block();
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
@@ -1287,7 +1300,7 @@ BOOST_AUTO_TEST_CASE( link_delay_link_change_heirarchy_test ) { try {
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
    chain.produce_block();
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
    chain.produce_block();
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
@@ -1341,7 +1354,7 @@ BOOST_AUTO_TEST_CASE( link_delay_link_change_heirarchy_test ) { try {
    BOOST_REQUIRE_EQUAL(asset::from_string("11.0000 CUR"), liquid_balance);
 
    chain.produce_block();
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
    chain.produce_block();
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
@@ -1485,7 +1498,7 @@ BOOST_AUTO_TEST_CASE( canceldelay_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("0.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(8));
+   chain.produce_block(delay_minus_blocks(10, 4)); // upstream: 8 s
 
    liquid_balance = get_currency_balance(chain, "tester"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("100.0000 CUR"), liquid_balance);
@@ -1580,7 +1593,7 @@ BOOST_AUTO_TEST_CASE( canceldelay_test ) { try {
    liquid_balance = get_currency_balance(chain, "tester2"_n);
    BOOST_REQUIRE_EQUAL(asset::from_string("10.0000 CUR"), liquid_balance);
 
-   chain.produce_block(fc::seconds(7));
+   chain.produce_block(delay_minus_blocks(10, 6)); // upstream: 7 s
    chain.produce_block();
 
    gen_size = chain.control->db().get_index<generated_transaction_multi_index,by_trx_id>().size();
