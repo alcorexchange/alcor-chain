@@ -5,7 +5,7 @@
 namespace eosio { namespace chain {
 
 genesis_state::genesis_state() {
-   initial_timestamp = fc::time_point::from_iso_string( "2018-06-01T12:00:00" );
+   initial_timestamp = fc::time_point::from_iso_string( "2025-01-01T00:00:00" ); // alcor-chain: not before the block timestamp epoch
    initial_key = fc::variant(eosio_root_key).as<public_key_type>();
 }
 

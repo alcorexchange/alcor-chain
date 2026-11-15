@@ -1691,6 +1691,11 @@ struct controller_impl {
       genheader.pending_schedule.schedule      = initial_schedule;
       // NOTE: if wtmsig block signatures are enabled at genesis time this should be the hash of a producer authority schedule
       genheader.pending_schedule.schedule_hash = fc::sha256::hash(initial_legacy_schedule);
+      // alcor-chain: block_timestamp counts slots from block_timestamp_epoch (2025) in unsigned math, so an
+      // earlier time silently wraps decades ahead and the chain never produces
+      EOS_ASSERT( genesis.initial_timestamp >= fc::time_point(fc::milliseconds(config::block_timestamp_epoch)), misc_exception,
+                  "genesis initial_timestamp ${t} is before the block timestamp epoch ${e}",
+                  ("t", genesis.initial_timestamp)("e", fc::time_point(fc::milliseconds(config::block_timestamp_epoch))) );
       genheader.header.timestamp               = genesis.initial_timestamp;
       genheader.header.action_mroot            = genesis.compute_chain_id();
       genheader.id                             = genheader.header.calculate_id();
