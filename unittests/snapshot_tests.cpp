@@ -502,12 +502,21 @@ void pending_schedule_snapshot_test()
    verify_integrity_hash<SNAPSHOT_SUITE>(*blockslog_chain.control, *latest_chain.control);
 }
 
-// alcor-chain: disabled. The data (prod_sched/blocks.log + snap_v2_prod_sched.*) is an EOSIO 1.8.x chain with
-// 500 ms slots from the 2000 epoch, saved to check the 1.8 -> 2.0 (WTMSIG) upgrade without replay. It cannot be
-// replayed with our block interval and epoch, and cannot be regenerated: Spring cannot write a v2 snapshot.
-// Our chain has no 1.8 history to upgrade from, so the case does not apply. (If an in-flight schedule change in
-// the current format is wanted, port the generator in snapshots/prod_sched/snapshot_tests.cpp.diff.)
-BOOST_TEST_DECORATOR(* boost::unit_test::disabled())
+// alcor-chain: skipped. The data (prod_sched/blocks.log + snap_v2_prod_sched.*) is an EOSIO 1.8.x chain with
+// 500 ms slots from the 2000 epoch (genesis 2020-01-01, before our epoch, refused by the controller), saved to
+// check the 1.8 -> 2.0 (WTMSIG) upgrade without replay. It cannot be replayed with our block interval and epoch,
+// and cannot be regenerated: Spring cannot write a v2 snapshot. Our chain has no 1.8 history to upgrade from, so
+// the case does not apply. (If an in-flight schedule change in the current format is wanted, port the generator
+// in snapshots/prod_sched/snapshot_tests.cpp.diff.)
+// A precondition, not boost::unit_test::disabled(): ctest runs `--run_test=snapshot_part2_tests`, and a suite
+// selected by name re-enables its disabled children (boost framework.ipp set_run_status). A failed precondition
+// is reported as skipped with this reason and does not fail the suite.
+static boost::test_tools::assertion_result upstream_1_8_upgrade_data_not_applicable(boost::unit_test::test_unit_id) {
+   boost::test_tools::assertion_result res(false);
+   res.message() << "alcor-chain: EOSIO 1.8 upgrade data at 500 ms / 2000 epoch does not apply to this chain";
+   return res;
+}
+BOOST_TEST_DECORATOR(* boost::unit_test::precondition(upstream_1_8_upgrade_data_not_applicable))
 BOOST_AUTO_TEST_CASE_TEMPLATE(test_pending_schedule_snapshot, SNAPSHOT_SUITE, snapshot_suites)
 {
    pending_schedule_snapshot_test<legacy_tester, SNAPSHOT_SUITE>();
