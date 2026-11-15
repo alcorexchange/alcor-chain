@@ -688,7 +688,9 @@ BOOST_FIXTURE_TEST_CASE(deferred_cfa_success, validating_tester_no_disable_defer
       BOOST_REQUIRE_EQUAL(transaction_receipt_header::status_enum::delayed, trace->receipt->status);
       BOOST_REQUIRE_EQUAL(1, trace->action_traces.size());
    }
-   produce_blocks(3);
+   // alcor-chain: delay_sec = 1 above; the last of these blocks is at the delay and executes the
+   // delayed trx (upstream: 3 = 1 s / 500 ms + 1; at 200 ms: 6)
+   produce_blocks(1 * 1000 / config::block_interval_ms + 1);
 
    // CFA success, testapi2 created
    BOOST_CHECK_EXCEPTION(create_account( "testapi2"_n ), fc::exception,
@@ -1127,6 +1129,11 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(api_part2_tests)
 
 BOOST_FIXTURE_TEST_CASE(deferred_transaction_tests, validating_tester_no_disable_deferred_trx) { try {
+   // alcor-chain: send_deferred_transaction(_replace) uses delay_sec = 2 and CALL_TEST_FUNCTION
+   // already produced the block it was sent in. After this many more blocks the pending block is
+   // exactly at the delay, so the deferred trx is ready but not executed yet
+   // (upstream: 3 = 2 s / 500 ms - 1; at 200 ms: 9).
+   constexpr uint32_t blocks_to_deferred_delay = 2 * 1000 / config::block_interval_ms - 1;
    produce_block();
    create_accounts( {"testapi"_n, "testapi2"_n, "alice"_n} );
    set_code( "testapi"_n, test_contracts::test_api_wasm() );
@@ -1165,7 +1172,7 @@ BOOST_FIXTURE_TEST_CASE(deferred_transaction_tests, validating_tester_no_disable
       } );
       CALL_TEST_FUNCTION(*this, "test_transaction", "send_deferred_transaction", {});
       BOOST_CHECK_THROW(CALL_TEST_FUNCTION(*this, "test_transaction", "send_deferred_transaction", {}), deferred_tx_duplicate);
-      produce_blocks( 3 );
+      produce_blocks( blocks_to_deferred_delay );
 
       //check that only one deferred transaction executed
       auto dtrxs = get_scheduled_transactions();
@@ -1191,7 +1198,7 @@ BOOST_FIXTURE_TEST_CASE(deferred_transaction_tests, validating_tester_no_disable
       } );
       CALL_TEST_FUNCTION(*this, "test_transaction", "send_deferred_transaction_replace", {});
       CALL_TEST_FUNCTION(*this, "test_transaction", "send_deferred_transaction_replace", {});
-      produce_blocks( 3 );
+      produce_blocks( blocks_to_deferred_delay );
 
       //check that only one deferred transaction executed
       auto billed_cpu_time_us = control->get_global_properties().configuration.min_transaction_cpu_usage;
