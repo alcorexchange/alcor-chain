@@ -25,15 +25,19 @@ Wallets (Anchor, WharfKit and others): add a custom network with the chain ID an
 
 ### Run a node
 
-Build from source on Ubuntu 22.04 or 24.04 (see [Build and Install from Source](#build-and-install-from-source) below):
+Install the `.deb` from the [release](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.1)
+(Ubuntu 22.04 and 24.04), or build the same package yourself with Spring's pinned reproducible build. It runs in Docker,
+so the host's compilers do not matter (Ubuntu 24.04 has no LLVM 11), and the result should match the release's sha256:
 
 ```bash
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
 cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_PREFIX_PATH=/usr/lib/llvm-11 ..
-make -j "$(nproc)"
+DOCKER_BUILDKIT=1 docker build --build-arg SPRING_BUILD_JOBS=8 -f tools/reproducible.Dockerfile -o . .
+sha256sum antelope-spring_*.deb
+sudo apt install ./antelope-spring_*.deb
 ```
+
+On Ubuntu 22.04 a plain build works too (LLVM 11 from apt), see [Build and Install from Source](#build-and-install-from-source).
 
 Start it with the testnet genesis and peer with us:
 
