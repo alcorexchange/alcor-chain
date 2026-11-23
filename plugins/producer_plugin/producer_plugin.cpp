@@ -572,19 +572,18 @@ public:
    bool     process_priority_trxs(const fc::time_point& deadline);
    bool     process_unapplied_trxs(const fc::time_point& deadline);
    void     start_batch(const fc::time_point& deadline);
-   // time the batch needs for the trxs waiting now: count * measured time per trx * 1.25 + 10 ms, at most the block
-   // CPU limit + 10 ms
+   // time the batch needs for the trxs waiting now: count * measured time per trx * 1.25 + 10 ms. Up to the whole time
+   // the block is open, so a backlog starts the batch at once instead of leaving the main thread idle.
    fc::microseconds batch_reserve() const {
-      const int64_t cpu_limit_us = chain_plug->chain().get_global_properties().configuration.max_block_cpu_usage;
-      const int64_t need_us      = int64_t(_unapplied_transactions.size()) * _batch_us_per_trx * 5 / 4;
-      return fc::microseconds(std::min(need_us, cpu_limit_us)) + fc::milliseconds(10);
+      const int64_t need_us = int64_t(_unapplied_transactions.size()) * _batch_us_per_trx * 5 / 4;
+      return fc::microseconds(std::min(need_us, _produce_block_cpu_effort.count())) + fc::milliseconds(10);
    }
    bool     batch_due() const { return fc::time_point::now() + batch_reserve() >= _pending_block_deadline; }
    // a priority trx left over by the priority pass (did not fit): the regular passes leave it for the next batch
    bool     priority_trx_in_batch(const transaction_metadata& trx) const {
       return _batch_block && is_priority_transaction(_batch_priority_actions, trx);
    }
-   void     run_batch(block_timestamp_type block_time);
+   void     run_batch(uint64_t batch_gen);
    bool     retire_deferred_trxs(const fc::time_point& deadline);
    bool     process_incoming_trxs(const fc::time_point& deadline, unapplied_transaction_queue::iterator& itr);
 
@@ -727,6 +726,7 @@ public:
    // its slot in one batch near the end of the slot, priority ones first (start_batch / run_batch).
    priority_actions_ptr                              _batch_priority_actions; // the list for the current batch
    std::optional<block_timestamp_type>               _batch_block;            // block in batch mode, trxs are queued
+   uint64_t                                          _batch_gen = 0;          // one per start_batch: a timer of an earlier block start is stale
    bool                                              _batch_done = false;     // its batch ran; the rest waits for the next block
    int64_t                                           _batch_us_per_trx = 300; // measured by each batch
    uint32_t                                          _max_block_cpu_usage_threshold_us            = 0;
@@ -1139,7 +1139,7 @@ public:
             _unapplied_transactions.add_incoming(trx, api_trx, return_failure_trace, next);
             trx_tracker.cancel();
             if (_batch_block && !_batch_done && in_producing_mode() && batch_due())
-               run_batch(*_batch_block);
+               run_batch(_batch_gen);
             return true;
          }
 
@@ -2717,23 +2717,25 @@ void producer_plugin_impl::start_batch(const fc::time_point& deadline) {
    const chain::controller& chain = chain_plug->chain();
    _batch_block = chain.pending_block_timestamp();
    _batch_done  = false;
+   ++_batch_gen;
 
    // a first guess from what waits now; every queued trx also checks batch_due, so a growing queue starts it earlier
    const auto at = deadline - batch_reserve();
    static const boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
    _batch_timer.expires_at(epoch + boost::posix_time::microseconds(at.time_since_epoch().count()));
-   _batch_timer.async_wait([this, block_time = *_batch_block](const boost::system::error_code& ec) {
+   _batch_timer.async_wait([this, gen = _batch_gen](const boost::system::error_code& ec) {
       if (ec == boost::asio::error::operation_aborted)
          return;
-      app().executor().post(priority::high, exec_queue::read_write, [this, block_time]() { run_batch(block_time); });
+      app().executor().post(priority::high, exec_queue::read_write, [this, gen]() { run_batch(gen); });
    });
    fc_dlog(_log, "Block ${bt}: batch at ${at}, deadline ${d}", ("bt", *_batch_block)("at", at)("d", deadline));
 }
 
-void producer_plugin_impl::run_batch(block_timestamp_type block_time) {
+void producer_plugin_impl::run_batch(uint64_t batch_gen) {
    chain::controller& chain = chain_plug->chain();
-   if (!in_producing_mode() || !chain.is_building_block() || _batch_block != block_time || _batch_done)
+   if (!in_producing_mode() || !chain.is_building_block() || !_batch_block || batch_gen != _batch_gen || _batch_done)
       return;
+   const auto block_time = *_batch_block;
    _batch_done = true;
    _batch_timer.cancel();
 
@@ -2764,6 +2766,11 @@ bool producer_plugin_impl::process_priority_trxs(const fc::time_point& deadline)
    if (!prio || _unapplied_transactions.empty())
       return true;
 
+   // priority trxs take at most half of the block's CPU, the rest is left for regular ones; the priority trxs over
+   // the share go first in the next block
+   const auto&   rl            = chain.get_resource_limits_manager();
+   const int64_t cpu_start     = rl.get_block_cpu_limit();
+   const int64_t priority_cpu  = int64_t(chain.get_global_properties().configuration.max_block_cpu_usage) / 2;
    const auto pending_block_num = chain.pending_block_num();
    bool       exhausted         = false;
    int        num_applied = 0, num_failed = 0, num_kept = 0;
@@ -2775,6 +2782,10 @@ bool producer_plugin_impl::process_priority_trxs(const fc::time_point& deadline)
       }
       if (should_interrupt_start_block(deadline, pending_block_num)) {
          exhausted = true;
+         break;
+      }
+      if (cpu_start - int64_t(rl.get_block_cpu_limit()) >= priority_cpu) {
+         fc_dlog(_log, "Priority transactions reached their share of the block CPU, the rest wait for the next block");
          break;
       }
 
