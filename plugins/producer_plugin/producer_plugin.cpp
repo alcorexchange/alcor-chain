@@ -2709,7 +2709,7 @@ void producer_plugin_impl::start_batch(const fc::time_point& deadline) {
    _batch_done  = false;
 
    const int64_t cpu_limit_us = chain.get_global_properties().configuration.max_block_cpu_usage;
-   const auto    reserve      = std::min(_last_batch_elapsed * 5 / 4, fc::microseconds(cpu_limit_us)) + fc::milliseconds(10);
+   const auto    reserve      = fc::microseconds(std::min(_last_batch_elapsed.count() * 5 / 4, cpu_limit_us)) + fc::milliseconds(10);
    const auto    at           = deadline - reserve;
 
    static const boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
