@@ -37,7 +37,20 @@ sha256sum antelope-spring_*.deb
 sudo apt install ./antelope-spring_*.deb
 ```
 
-On Ubuntu 22.04 a plain build works too (LLVM 11 from apt), see [Build and Install from Source](#build-and-install-from-source).
+Or build natively, without Docker. On Ubuntu 24.04 there is no LLVM 11, so turn off EOS VM OC, the optional
+optimizing contract compiler that needs it: the node runs contracts on eos-vm-jit, with the same results.
+
+```bash
+sudo apt install -y build-essential cmake git libcurl4-openssl-dev libgmp-dev zlib1g-dev python3 file
+git clone --recursive https://github.com/alcorexchange/alcor-chain.git
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_OC=OFF ..
+make -j "$(nproc)" package          # about 4 GB of RAM per job; lower -j on a small box
+sudo apt install ./antelope-spring_*.deb
+```
+
+On Ubuntu 22.04, LLVM 11 comes from apt and OC can stay on, see [Build and Install from Source](#build-and-install-from-source).
 
 Start it with the testnet genesis and peer with us:
 
