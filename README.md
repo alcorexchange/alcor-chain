@@ -16,7 +16,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | History API (Hyperion) | https://history.acc.alcor.exchange ([docs](https://history.acc.alcor.exchange/v2/docs)) |
 | Explorer | https://explorer.alcor.exchange/acc |
 | P2P | `p2p.acc.alcor.exchange:9876` (block producers: send us your node's IP, the port is allowlisted) |
-| Chain ID | `9a240245154fe822b0d6dcb2247a0f59a1b0b7f49eb6ff4829f0066060f562ef` |
+| Chain ID | `a23b0ec475262075fa3b99a38614e243c00275f777fce93e2d70a4f8d367e3fb` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
 | Block time | 200 ms, 30 blocks per producer round, Savanna finality |
@@ -69,20 +69,33 @@ nodeos --genesis-json testnet/genesis.json \
 
 ### Become a block producer
 
-Generate fresh testnet keys on your own machine (never reuse mainnet keys) and send us only the public parts in the chat:
+1. Generate fresh testnet keys on your own machine (never reuse mainnet keys):
+   - account owner and active keys: `cleos create key --to-console`
+   - a block signing key: `cleos create key --to-console` (K1; EM and ED keys cannot sign blocks)
+   - a BLS finalizer key with its proof of possession: `spring-util bls create key --to-console`
+2. Send us in the chat your account name, owner and active public keys and your node's public IP. We create the
+   account with test HORN and allowlist your IP for p2p.
+3. Run a node in sync with the testnet (above), with your producer settings:
 
-- account owner and active keys: `cleos create key --to-console`
-- a block signing key: `cleos create key --to-console` (K1; EM and ED keys cannot sign blocks)
-- a BLS finalizer key with its proof of possession: `spring-util bls create key --to-console`
-- your node's public IP and p2p port
+   ```ini
+   producer-name = <your account>
+   signature-provider = <signing public key>=KEY:<signing private key>
+   signature-provider = <BLS public key>=KEY:<BLS private key>
+   ```
 
-We create the account and add you to the producer schedule and the finalizer policy. On your node, add:
+4. Register as a producer and register your finalizer key:
 
-```ini
-producer-name = <your account>
-signature-provider = <signing public key>=KEY:<signing private key>
-signature-provider = <BLS public key>=KEY:<BLS private key>
-```
+   ```bash
+   cleos -u https://api.acc.alcor.exchange system regproducer <account> <signing public key> <url> 0
+   cleos -u https://api.acc.alcor.exchange push action eosio regfinkey \
+     '["<account>","<BLS public key>","<BLS proof of possession>"]' -p <account>@active
+   ```
+
+5. Tell us in the chat. Producers are elected by votes (the schedule is the top 21 by votes, updated every minute);
+   we vote you in once your node is in sync. You produce 30 blocks (6 s) per round.
+
+The finalizer policy is still set by hand: we add new finalizers once their nodes have run stable for a while, so a
+node that goes down costs its own slots, never the chain's finality.
 
 ### Related repositories
 
