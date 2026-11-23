@@ -13,6 +13,8 @@ finality proofs. It is open for the Antelope community to run, review and take f
 |---|---|
 | Faucet (account + test HORN) | https://acc.alcor.exchange/faucet |
 | API | https://api.acc.alcor.exchange |
+| History API (Hyperion) | https://history.acc.alcor.exchange ([docs](https://history.acc.alcor.exchange/v2/docs)) |
+| Explorer | https://explorer.alcor.exchange/acc |
 | P2P | `p2p.acc.alcor.exchange:9876` (block producers: send us your node's IP, the port is allowlisted) |
 | Chain ID | `9ae36fa71c10a5494664d3e1f9c67fba5dca35d316848a57a8df115ad306978f` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
@@ -41,6 +43,7 @@ Or build natively, without Docker. On Ubuntu 24.04 there is no LLVM 11, so turn 
 optimizing contract compiler that needs it: the node runs contracts on eos-vm-jit, with the same results.
 
 ```bash
+# not yet tried on 24.04 by us: tell us in the chat if it breaks
 sudo apt install -y build-essential cmake git libcurl4-openssl-dev libgmp-dev zlib1g-dev python3 file
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
 cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
