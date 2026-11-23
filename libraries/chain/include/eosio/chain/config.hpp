@@ -128,13 +128,16 @@ const static eosio::chain::wasm_interface::vm_type default_wasm_runtime = eosio:
 const static uint32_t   default_abi_serializer_max_time_us = 15*1000; ///< default deadline for abi serialization methods
 
 /**
- *  The number of sequential blocks produced by a single producer
+ *  The number of sequential blocks produced by a single producer.
+ *  alcor-chain: 30 (6 s at 200 ms), not 12. The handoff between producers is serial (the last block is executed,
+ *  sent and applied before the next producer builds on it) and leaves a gap of produce-block-offset-ms each round:
+ *  with 12 blocks of 200 ms that was ~19% of the time, with 30 ~7.5%. Consensus: whose slot it is depends on it.
  */
-const static int producer_repetitions = 12;
+const static int producer_repetitions = 30;
 const static int max_producers = 125; // pre-savanna producer (proposer) limit
 const static int max_proposers = 64*1024; // savanna proposer (producer) limit
 
-const static size_t maximum_tracked_dpos_confirmations = 1024;     ///<
+const static size_t maximum_tracked_dpos_confirmations = 4096;     ///< alcor-chain: >= (125 * 2 / 3 + 1) * 30 = 2520 (legacy DPoS, before Savanna)
 static_assert(maximum_tracked_dpos_confirmations >= ((max_producers * 2 / 3) + 1) * producer_repetitions, "Settings never allow for DPOS irreversibility" );
 
 /**
