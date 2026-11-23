@@ -572,6 +572,14 @@ public:
    bool     process_priority_trxs(const fc::time_point& deadline);
    bool     process_unapplied_trxs(const fc::time_point& deadline);
    void     start_batch(const fc::time_point& deadline);
+   // time the batch needs for the trxs waiting now: count * measured time per trx * 1.25 + 10 ms, at most the block
+   // CPU limit + 10 ms
+   fc::microseconds batch_reserve() const {
+      const int64_t cpu_limit_us = chain_plug->chain().get_global_properties().configuration.max_block_cpu_usage;
+      const int64_t need_us      = int64_t(_unapplied_transactions.size()) * _batch_us_per_trx * 5 / 4;
+      return fc::microseconds(std::min(need_us, cpu_limit_us)) + fc::milliseconds(10);
+   }
+   bool     batch_due() const { return fc::time_point::now() + batch_reserve() >= _pending_block_deadline; }
    // a priority trx left over by the priority pass (did not fit): the regular passes leave it for the next batch
    bool     priority_trx_in_batch(const transaction_metadata& trx) const {
       return _batch_block && is_priority_transaction(_batch_priority_actions, trx);
@@ -720,7 +728,7 @@ public:
    priority_actions_ptr                              _batch_priority_actions; // the list for the current batch
    std::optional<block_timestamp_type>               _batch_block;            // block in batch mode, trxs are queued
    bool                                              _batch_done = false;     // its batch ran; the rest waits for the next block
-   fc::microseconds                                  _last_batch_elapsed{0};
+   int64_t                                           _batch_us_per_trx = 300; // measured by each batch
    uint32_t                                          _max_block_cpu_usage_threshold_us            = 0;
    uint32_t                                          _max_block_net_usage_threshold_bytes         = 0;
    bool                                              _disable_subjective_p2p_billing              = true;
@@ -1130,6 +1138,8 @@ public:
          if (!chain.is_building_block() || (_batch_block && !trx->is_transient())) {
             _unapplied_transactions.add_incoming(trx, api_trx, return_failure_trace, next);
             trx_tracker.cancel();
+            if (_batch_block && !_batch_done && in_producing_mode() && batch_due())
+               run_batch(*_batch_block);
             return true;
          }
 
@@ -2708,10 +2718,8 @@ void producer_plugin_impl::start_batch(const fc::time_point& deadline) {
    _batch_block = chain.pending_block_timestamp();
    _batch_done  = false;
 
-   const int64_t cpu_limit_us = chain.get_global_properties().configuration.max_block_cpu_usage;
-   const auto    reserve      = fc::microseconds(std::min(_last_batch_elapsed.count() * 5 / 4, cpu_limit_us)) + fc::milliseconds(10);
-   const auto    at           = deadline - reserve;
-
+   // a first guess from what waits now; every queued trx also checks batch_due, so a growing queue starts it earlier
+   const auto at = deadline - batch_reserve();
    static const boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
    _batch_timer.expires_at(epoch + boost::posix_time::microseconds(at.time_since_epoch().count()));
    _batch_timer.async_wait([this, block_time = *_batch_block](const boost::system::error_code& ec) {
@@ -2727,17 +2735,23 @@ void producer_plugin_impl::run_batch(block_timestamp_type block_time) {
    if (!in_producing_mode() || !chain.is_building_block() || _batch_block != block_time || _batch_done)
       return;
    _batch_done = true;
+   _batch_timer.cancel();
 
-   const auto start    = fc::time_point::now();
-   const auto deadline = _pending_block_deadline;
+   const auto   start    = fc::time_point::now();
+   const auto   deadline = _pending_block_deadline;
+   const size_t queued   = _unapplied_transactions.size();
    // && : if the priority pass ran out of time or block, the regular trxs wait too
-   bool       done     = process_priority_trxs(deadline) && process_unapplied_trxs(deadline);
+   bool done = process_priority_trxs(deadline) && process_unapplied_trxs(deadline);
    if (done) {
       auto incoming_itr = _unapplied_transactions.incoming_begin();
       done = process_incoming_trxs(deadline, incoming_itr);
    }
-   _last_batch_elapsed = fc::time_point::now() - start;
-   fc_dlog(_log, "Block ${bt}: batch took ${t} us${x}", ("bt", block_time)("t", _last_batch_elapsed)("x", done ? "" : ", exhausted"));
+   const auto   elapsed = fc::time_point::now() - start;
+   const size_t taken   = queued - std::min(queued, _unapplied_transactions.size());
+   if (taken > 0) // moving average of the time per trx, for the next batch's start
+      _batch_us_per_trx = (_batch_us_per_trx * 3 + elapsed.count() / int64_t(taken)) / 4;
+   fc_dlog(_log, "Block ${bt}: batch of ${n} trxs took ${t} us (${u} us/trx)${x}",
+           ("bt", block_time)("n", taken)("t", elapsed)("u", _batch_us_per_trx)("x", done ? "" : ", exhausted"));
 
    if (!done || block_is_exhausted())
       schedule_maybe_produce_block(true);
@@ -3076,7 +3090,12 @@ void producer_plugin_impl::schedule_maybe_produce_block(bool exhausted) {
 
    _timer.async_wait([&chain, this, cid = ++_timer_corelation_id](const boost::system::error_code& ec) {
       if (ec != boost::asio::error::operation_aborted && cid == _timer_corelation_id) {
-         app().executor().post(priority::high, exec_queue::read_write, [&chain, this]() {
+         app().executor().post(priority::high, exec_queue::read_write, [&chain, this, cid]() {
+            // The timer may have fired and posted this while the main thread re-armed it (a batch that ran to the
+            // deadline and asked to produce now): then two produce requests wait, and the stale one would produce
+            // the next block at once, empty. Only the latest request produces.
+            if (cid != _timer_corelation_id)
+               return;
             // pending_block_state expected, but can't assert inside async_wait
             auto block_num = chain.is_building_block() ? chain.head().block_num() + 1 : 0;
             fc_dlog(_log, "Produce block timer for ${num} running at ${time}", ("num", block_num)("time", fc::time_point::now()));
