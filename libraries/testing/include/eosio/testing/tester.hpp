@@ -391,6 +391,9 @@ namespace eosio::testing {
             auto secret = fc::sha256::hash(keyname.to_string() + role);
             if constexpr (std::is_same_v<KeyType, mock::webauthn_private_key>) {
                return mock::webauthn_private_key::regenerate(secret);
+            } else if constexpr (std::is_same_v<KeyType, fc::ed::private_key_shim>) {
+               // an ED secret is seed ‖ public key, derived from the 32-byte seed
+               return private_key_type::regenerate<KeyType>(fc::ed::secret_key_from_seed(secret));
             } else {
                return private_key_type::regenerate<KeyType>(secret);
             }
