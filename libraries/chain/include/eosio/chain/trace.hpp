@@ -107,6 +107,7 @@ namespace eosio::chain {
       std::optional<fc::exception>               except;
       std::optional<uint64_t>                    error_code;
       std::exception_ptr                         except_ptr;
+      bool                                       auth_checked = false; ///< this attempt verified the trx's authorizations; node-local, not serialized
    };
 
    /**

@@ -3106,6 +3106,7 @@ struct controller_impl {
                        false,
                        trx->is_dry_run()
                );
+               trace->auth_checked = true;
             }
             trx_context.exec();
             trx_context.finalize(); // Automatically rounds up network and CPU usage in trace and bills payers if successful
