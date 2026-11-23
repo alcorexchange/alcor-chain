@@ -208,9 +208,14 @@ BOOST_FIXTURE_TEST_CASE(fork_with_bad_block_savanna, savanna_cluster::cluster_t)
 // -----------------------------------------------------------------------------------------------
 BOOST_FIXTURE_TEST_CASE( forking_savanna, savanna_cluster::cluster_t ) try {
    auto& C=_nodes[2]; auto& D=_nodes[3];
-   _nodes[0].produce_blocks(2); // produce two extra blocks at the beginning so that producer schedules align
-   
    const vector<account_name> producers { "dan"_n, "sam"_n, "pam"_n };
+
+   // produce extra blocks at the beginning so that producer schedules align: a schedule proposed in the next block
+   // becomes active two rounds later, we want that round to be dan's (upstream: 2 blocks with 12 blocks per round).
+   auto round_of_next_block = [&]() { return (_nodes[0].head().timestamp().slot + 1) / config::producer_repetitions; };
+   while ((round_of_next_block() + 2) % producers.size() != 0)
+      _nodes[0].produce_block();
+
    _nodes[0].create_accounts(producers);
    auto prod = _nodes[0].set_producers(producers);   // set new producers and produce blocks until the switch is pending
 
@@ -226,9 +231,9 @@ BOOST_FIXTURE_TEST_CASE( forking_savanna, savanna_cluster::cluster_t ) try {
    _nodes[3].produce_block();
 
    BOOST_REQUIRE_EQUAL(0u, num_lib_advancing([&]() {
-      // now that the network is split, produce 9 blocks on _nodes[0]
-      sb = _nodes[0].produce_blocks(9);
-      BOOST_REQUIRE_EQUAL(sb->producer, producers[prod]); // 11th block produced by producers[prod]
+      // now that the network is split, produce all but the last 2 blocks of the round on _nodes[0]
+      sb = _nodes[0].produce_blocks(config::producer_repetitions - 3);
+      BOOST_REQUIRE_EQUAL(sb->producer, producers[prod]); // (repetitions-1)th block produced by producers[prod]
    }));
 
    // set new producers and produce blocks until the switch is pending
@@ -243,12 +248,12 @@ BOOST_FIXTURE_TEST_CASE( forking_savanna, savanna_cluster::cluster_t ) try {
 
    _nodes[0].produce_blocks(3);                                 // sam produces 3 more blocks
 
-   // start producing on _nodes[3], skipping ahead by 23 block_interval_ms so that these block timestamps
-   // will be ahead of those of _nodes[0].
+   // start producing on _nodes[3], skipping ahead by 2 * repetitions - 2 block intervals so that these block
+   // timestamps will be ahead of those of _nodes[0].
    //
-   // _nodes[3] is still having just produced the 2nd block by "sam", and with the `producers` schedule.
-   // skip 22 blocks in the future so that "pam" produces
-   auto node3_head = _nodes[3].produce_block(_block_interval_us * 22);
+   // _nodes[3] is still having just produced the 2nd block by "dan", and with the `producers` schedule.
+   // skip to the last block of "sam"'s round, so that "pam" produces next
+   auto node3_head = _nodes[3].produce_block(_block_interval_us * (2 * config::producer_repetitions - 2));
    BOOST_REQUIRE_EQUAL(node3_head->producer, producers[1]);    // should be sam's last block
    push_block(0, node3_head);
    BOOST_REQUIRE_EQUAL(_nodes[3].head().id(), _nodes[0].head().id());  // fork switch on 1st block because of later timestamp
@@ -256,10 +261,10 @@ BOOST_FIXTURE_TEST_CASE( forking_savanna, savanna_cluster::cluster_t ) try {
 
    sb = _nodes[3].produce_block();
    BOOST_REQUIRE_EQUAL(sb->producer, producers[2]);            // just switched to "pam"
-   sb = _nodes[3].produce_blocks(12);                          // after 12 blocks, should have switched to "dan"
+   sb = _nodes[3].produce_blocks(config::producer_repetitions); // after a round, should have switched to "dan"
    BOOST_REQUIRE_EQUAL(sb->producer, producers[0]);            // chack that this is the case
 
-   push_blocks(3, 0, node3_head->block_num() + 1);             // push the last 13 produced blocks to _nodes[0]
+   push_blocks(3, 0, node3_head->block_num() + 1);             // push the last repetitions + 1 produced blocks to _nodes[0]
    BOOST_REQUIRE_EQUAL(_nodes[0].head().id(), _nodes[3].head().id());  // _nodes[0] caught up
    BOOST_REQUIRE_EQUAL(_nodes[1].head().id(), _nodes[3].head().id());  // _nodes[0] peer was updated as well
 

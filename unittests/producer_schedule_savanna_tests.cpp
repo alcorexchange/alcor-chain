@@ -84,8 +84,8 @@ BOOST_FIXTURE_TEST_CASE( verify_producer_schedule_after_savanna_activation, lega
    // Send set prods action and confirm schedule correctness
    auto trace = set_producers(producers);
    const auto first_prod_schd = get_producer_authorities(producers);
-   // called in first round so complete it, skip one round of 12 and start on next round, so block 24
-   confirm_schedule_correctness(first_prod_schd, 1, 24);
+   // called in first round so complete it, skip one round and start on next round, so block 2 * repetitions
+   confirm_schedule_correctness(first_prod_schd, 1, 2 * config::producer_repetitions);
 
    // ---- Test second set of producers ----
    vector<account_name> second_set_of_producer = {
@@ -94,8 +94,8 @@ BOOST_FIXTURE_TEST_CASE( verify_producer_schedule_after_savanna_activation, lega
    // Send set prods action and confirm schedule correctness
    set_producers(second_set_of_producer);
    const auto second_prod_schd = get_producer_authorities(second_set_of_producer);
-   // called after block 24, so next,next is 48
-   confirm_schedule_correctness(second_prod_schd, 2, 48);
+   // called after block 2 * repetitions, so next,next is 4 * repetitions
+   confirm_schedule_correctness(second_prod_schd, 2, 4 * config::producer_repetitions);
 
    // ---- Test deliberately miss some blocks ----
    const int64_t num_of_missed_blocks = 5000;

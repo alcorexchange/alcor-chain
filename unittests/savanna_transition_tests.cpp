@@ -35,7 +35,8 @@ BOOST_FIXTURE_TEST_CASE(transition_with_split_network_before_critical_block,
 
    // set two producers, so that we have at least one block between the genesis and critical block.
    // with one producer the critical block comes right after the genesis block.
-   // with two producers there are 17 blocks in between (genesis=7, critical=25, pt=28)
+   // with two producers there are 2 * repetitions - 7 blocks in between (genesis=7, critical=2 * repetitions + 1,
+   // pt=critical + 3; with 12 repetitions: 17 blocks, genesis=7, critical=25, pt=28)
    // ---------------------------------------------------------------------------------------------
    std::vector<account_name> producers { "pa"_n, "pb"_n };
    A.create_accounts(producers);
@@ -63,7 +64,7 @@ BOOST_FIXTURE_TEST_CASE(transition_with_split_network_before_critical_block,
    // partition network and produce blocks
    // ----------------------------------------
    set_partition( {&C, &D} );
-   A.produce_blocks(20);
+   A.produce_blocks(2 * config::producer_repetitions - 4); // past the critical block
 
    // verify that lib has stalled
    // ---------------------------
@@ -100,7 +101,8 @@ BOOST_FIXTURE_TEST_CASE(restart_from_snapshot_at_beginning_of_transition_while_p
 
    // set two producers, so that we have at least one block between the genesis and critical block.
    // with one producer the critical block comes right after the genesis block.
-   // with two producers there are 17 blocks in between (genesis=7, critical=25, pt=28)
+   // with two producers there are 2 * repetitions - 7 blocks in between (genesis=7, critical=2 * repetitions + 1,
+   // pt=critical + 3; with 12 repetitions: 17 blocks, genesis=7, critical=25, pt=28)
    // ---------------------------------------------------------------------------------------------
    std::vector<account_name> producers { "pa"_n, "pb"_n };
    A.create_accounts(producers);
@@ -134,7 +136,7 @@ BOOST_FIXTURE_TEST_CASE(restart_from_snapshot_at_beginning_of_transition_while_p
    A.produce_blocks(2);
 
    auto snapshot_C = C.snapshot();
-   A.produce_blocks(5);          // arbitrary number, should be less than 14 so we don't reach the critical block
+   A.produce_blocks(5);          // arbitrary number, should be less than 2 * repetitions - 10 so we don't reach the critical block
 
    // we can't leave the blocks log as it doesn't contain the snapshot's head block.
    for (auto& N : failing_nodes) {
@@ -190,7 +192,8 @@ BOOST_FIXTURE_TEST_CASE(restart_from_snapshot_at_end_of_transition_while_preserv
 
    // set two producers, so that we have at least one block between the genesis and critical block.
    // with one producer the critical block comes right after the genesis block.
-   // with two producers there are 17 blocks in between (genesis=7, critical=25, pt=28)
+   // with two producers there are 2 * repetitions - 7 blocks in between (genesis=7, critical=2 * repetitions + 1,
+   // pt=critical + 3; with 12 repetitions: 17 blocks, genesis=7, critical=25, pt=28)
    // ---------------------------------------------------------------------------------------------
    std::vector<account_name> producers { "pa"_n, "pb"_n };
    A.create_accounts(producers);
@@ -275,7 +278,8 @@ BOOST_FIXTURE_TEST_CASE(restart_from_snapshot_at_beginning_of_transition_with_lo
 
    // set two producers, so that we have at least one block between the genesis and critical block.
    // with one producer the critical block comes right after the genesis block.
-   // with two producers there are 17 blocks in between (genesis=7, critical=25, pt=28)
+   // with two producers there are 2 * repetitions - 7 blocks in between (genesis=7, critical=2 * repetitions + 1,
+   // pt=critical + 3; with 12 repetitions: 17 blocks, genesis=7, critical=25, pt=28)
    // ---------------------------------------------------------------------------------------------
    std::vector<account_name> producers { "pa"_n, "pb"_n };
    A.create_accounts(producers);
@@ -309,7 +313,7 @@ BOOST_FIXTURE_TEST_CASE(restart_from_snapshot_at_beginning_of_transition_with_lo
    A.produce_blocks(2);
 
    auto snapshot_C = C.snapshot();
-   A.produce_blocks(5);          // arbitrary number, should be less than 14 so we don't reach the critical block
+   A.produce_blocks(5);          // arbitrary number, should be less than 2 * repetitions - 10 so we don't reach the critical block
 
    // we can't leave the blocks log as it doesn't contain the snapshot's head block.
    for (auto& N : failing_nodes) {

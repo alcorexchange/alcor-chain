@@ -26,7 +26,9 @@ BOOST_FIXTURE_TEST_CASE( verify_producer_schedule, legacy_validating_tester ) tr
 
    // Utility function to ensure that producer schedule work as expected
    const auto& confirm_schedule_correctness = [&](const vector<producer_authority>& new_prod_schd, uint32_t expected_schd_ver)  {
-      const uint32_t check_duration = 1000; // number of blocks
+      // number of blocks: 4 rounds of 21 producers (upstream: 1000 blocks with 12 blocks per producer).
+      // A new schedule of 21 producers needs ~56 * producer_repetitions blocks to become active.
+      const uint32_t check_duration = 4 * 21 * config::producer_repetitions;
       bool scheduled_changed_to_new = false;
       for (uint32_t i = 0; i < check_duration; ++i) {
          const auto current_schedule = control->active_producers().producers;
@@ -163,7 +165,7 @@ BOOST_FIXTURE_TEST_CASE( producer_schedule_promotion_test, legacy_validating_tes
    produce_block(); // Starts new block which promotes the pending schedule to active
    BOOST_CHECK_EQUAL( control->active_producers().version, 1u );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch1, control->active_producers() ) );
-   produce_blocks(6);
+   BOOST_REQUIRE( produce_until_transition( *this, "alice"_n, "bob"_n ) ); // to the end of Alice's first round
 
    res = set_producers( {"alice"_n,"bob"_n,"carol"_n} );
    vector<producer_authority> sch2 = {
@@ -176,17 +178,17 @@ BOOST_FIXTURE_TEST_CASE( producer_schedule_promotion_test, legacy_validating_tes
    BOOST_CHECK_EQUAL( true, compare_schedules( sch2, *control->proposed_producers_legacy() ) );
 
    produce_block();
-   produce_blocks(23); // Alice produces the last block of her first round.
-                    // Bob's first block (which advances LIB to Alice's last block) is started but not finalized.
+   produce_blocks(2 * config::producer_repetitions - 1); // Bob finishes his round, Alice produces her second round.
+                    // Bob's next block (which promotes the proposed schedule to pending) is started but not finalized.
    BOOST_REQUIRE_EQUAL( head().producer(), "alice"_n );
    BOOST_REQUIRE_EQUAL( control->pending_block_producer(), "bob"_n );
    BOOST_REQUIRE(control->pending_producers_legacy());
    BOOST_CHECK_EQUAL( control->pending_producers_legacy()->version, 2u );
 
-   produce_blocks(12); // Bob produces his first 11 blocks
+   produce_blocks(config::producer_repetitions); // Bob produces his round
    BOOST_CHECK_EQUAL( control->active_producers().version, 1u );
-   produce_blocks(12); // Bob produces his 12th block.
-                    // Alice's first block of the second round is started but not finalized (which advances LIB to Bob's last block).
+   produce_blocks(config::producer_repetitions); // Alice produces her round.
+                    // Bob's next block (which advances LIB past the pending schedule and makes it active) is started but not finalized.
    BOOST_REQUIRE_EQUAL( head().producer(), "alice"_n );
    BOOST_REQUIRE_EQUAL( control->pending_block_producer(), "bob"_n );
    BOOST_CHECK_EQUAL( control->active_producers().version, 2u );
@@ -230,7 +232,7 @@ BOOST_FIXTURE_TEST_CASE( producer_schedule_reduction, legacy_tester ) try {
    produce_block(); // Starts new block which promotes the pending schedule to active
    BOOST_CHECK_EQUAL( control->active_producers().version, 1u );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch1, control->active_producers() ) );
-   produce_blocks(6);
+   BOOST_REQUIRE( produce_until_transition( *this, "alice"_n, "bob"_n ) ); // to the end of Alice's first round
 
    res = set_producers( {"alice"_n,"bob"_n} );
    vector<producer_authority> sch2 = {
@@ -241,13 +243,13 @@ BOOST_FIXTURE_TEST_CASE( producer_schedule_reduction, legacy_tester ) try {
    BOOST_REQUIRE_EQUAL( true, control->proposed_producers_legacy().has_value() );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch2, *control->proposed_producers_legacy() ) );
 
-   produce_blocks(48);
+   produce_blocks(4 * config::producer_repetitions);
    BOOST_REQUIRE_EQUAL( head().producer(), "bob"_n );
    BOOST_REQUIRE_EQUAL( control->pending_block_producer(), "carol"_n );
    BOOST_REQUIRE(control->pending_producers_legacy());
    BOOST_CHECK_EQUAL( control->pending_producers_legacy()->version, 2u );
 
-   produce_blocks(47);
+   produce_blocks(4 * config::producer_repetitions - 1);
    BOOST_CHECK_EQUAL( control->active_producers().version, 1u );
    produce_blocks(1);
 
@@ -298,7 +300,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_producer_schedule_has_no_effect, T, validati
    c.produce_block();
    BOOST_CHECK_EQUAL( c.control->active_producers().version, 1u );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch1, c.control->active_producers() ) );
-   c.produce_blocks(6);
+   // produce until the pending block is the last block of Alice's round
+   auto index = c.head().timestamp().slot % config::producer_repetitions;
+   c.produce_blocks(config::producer_repetitions - index - 2);
+   BOOST_REQUIRE_EQUAL( c.control->pending_block_producer(), "alice"_n );
 
    res = c.set_producers_legacy( {} );
    wlog("set producer schedule to []");
@@ -306,7 +311,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_producer_schedule_has_no_effect, T, validati
    BOOST_CHECK_EQUAL( c.control->proposed_producers_legacy()->producers.size(), 0u );
    BOOST_CHECK_EQUAL( c.control->proposed_producers_legacy()->version, 2u );
 
-   c.produce_blocks(12);
+   c.produce_blocks(config::producer_repetitions);
    BOOST_REQUIRE(c.control->pending_producers_legacy());
    BOOST_CHECK_EQUAL( c.control->pending_producers_legacy()->version, 1u );
 
@@ -317,7 +322,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_producer_schedule_has_no_effect, T, validati
    BOOST_CHECK_EQUAL( false, c.control->proposed_producers_legacy().has_value() );
 
    // However it should not get promoted from pending to active
-   c.produce_blocks(24);
+   c.produce_blocks(2 * config::producer_repetitions);
    BOOST_CHECK_EQUAL( c.control->active_producers().version, 1u );
    BOOST_REQUIRE(c.control->pending_producers_legacy());
    BOOST_CHECK_EQUAL( c.control->pending_producers_legacy()->version, 2u );
@@ -335,14 +340,14 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_producer_schedule_has_no_effect, T, validati
    BOOST_CHECK_EQUAL( c.control->proposed_producers_legacy()->version, 2u );
 
    // Produce enough blocks to promote the proposed schedule to pending, which it can do because the existing pending has zero producers
-   c.produce_blocks(24);
+   c.produce_blocks(2 * config::producer_repetitions);
    BOOST_CHECK_EQUAL( c.control->active_producers().version, 1u );
    BOOST_REQUIRE(c.control->pending_producers_legacy());
    BOOST_CHECK_EQUAL( c.control->pending_producers_legacy()->version, 2u );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch2, *c.control->pending_producers_legacy() ) );
 
    // Produce enough blocks to promote the pending schedule to active
-   c.produce_blocks(24);
+   c.produce_blocks(2 * config::producer_repetitions);
    BOOST_CHECK_EQUAL( c.control->active_producers().version, 2u );
    BOOST_CHECK_EQUAL( true, compare_schedules( sch2, c.control->active_producers() ) );
 
@@ -481,7 +486,7 @@ BOOST_AUTO_TEST_CASE( producer_watermark_test ) try {
    BOOST_REQUIRE_EQUAL( c.control->active_producers().version, 3u );
 
    produce_until_transition( c, "alice"_n, "bob"_n );
-   c.produce_blocks(11);
+   c.produce_blocks(config::producer_repetitions - 1);
    BOOST_CHECK_EQUAL( c.control->pending_block_producer(), "bob"_n );
    c.finish_block();
 
