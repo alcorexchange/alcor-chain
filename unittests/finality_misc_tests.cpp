@@ -1,4 +1,5 @@
 #include <eosio/chain/qc.hpp>
+#include <eosio/chain/finalizer_policy.hpp>
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/block_header.hpp>
 
@@ -235,6 +236,44 @@ BOOST_AUTO_TEST_CASE(qc_state_transitions) try {
       }
    }
 
+} FC_LOG_AND_RETHROW();
+
+// A weak vote in weak_achieved that brings weak_sum to exactly total - threshold must not end aggregation:
+// the remaining weight still reaches the threshold, so a later strong vote makes the QC strong.
+BOOST_AUTO_TEST_CASE(weak_sum_at_max_keeps_strong_reachable) try {
+   using namespace eosio::chain;
+   using namespace fc::crypto::blslib;
+   using state_t = aggregating_qc_sig_t::state_t;
+
+   digest_type d(fc::sha256("0000000000000000000000000000001"));
+   std::vector<uint8_t> digest(d.data(), d.data() + d.data_size());
+   std::vector<bls_private_key> sk;
+   for (int i = 0; i < 6; ++i)
+      sk.push_back(bls_private_key::generate());
+
+   // 6 finalizers of weight 1, threshold 4: strong is reachable while weak_sum <= 2
+   aggregating_qc_sig_t qc(6, 4, 2);
+   auto vote = [&](size_t i, bool strong) { return qc.add_vote(0, 0, strong, i, sk[i].sign(digest), 1); };
+   vote(0, true);
+   vote(1, true);
+   vote(2, true);
+   vote(3, false);
+   BOOST_CHECK_EQUAL(qc.state(), state_t::weak_achieved); // 3 strong + 1 weak = 4
+   vote(4, false);
+   BOOST_CHECK_EQUAL(qc.state(), state_t::weak_achieved); // weak_sum 2 = total - threshold
+   vote(5, true);
+   BOOST_CHECK_EQUAL(qc.state(), state_t::strong);        // 4 strong
+} FC_LOG_AND_RETHROW();
+
+BOOST_AUTO_TEST_CASE(max_weak_sum_with_large_weights) try {
+   using namespace eosio::chain;
+   using namespace fc::crypto::blslib;
+   const uint64_t big = uint64_t{1} << 32;
+   finalizer_policy policy{.generation = 1, .threshold = big + 1};
+   for (uint64_t w : {big, uint64_t{7}, uint64_t{1}})
+      policy.finalizers.push_back(finalizer_authority{.description = "f", .weight = w,
+                                                      .public_key = bls_private_key::generate().get_public_key()});
+   BOOST_CHECK_EQUAL(policy.max_weak_sum_before_weak_final(), 7u); // big + 8 - (big + 1)
 } FC_LOG_AND_RETHROW();
 
 BOOST_AUTO_TEST_SUITE_END()

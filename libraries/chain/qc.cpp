@@ -311,7 +311,8 @@ vote_result_t aggregating_qc_sig_t::add_weak_vote(size_t index, const bls_signat
       break;
 
    case state_t::weak_achieved:
-      if (weak_sum >= max_weak_sum_before_weak_final)
+      // strong is out of reach only when weak_sum > total - threshold, the same test as above
+      if (weak_sum > max_weak_sum_before_weak_final)
          aggregating_state = state_t::weak_final;
       break;
 
