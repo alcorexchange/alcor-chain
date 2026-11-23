@@ -51,6 +51,14 @@ namespace fc { namespace crypto {
          return key.generate_shared_secret(std::template get<PublicKeyType>(_pub_storage));
       }
 
+      sha512 operator()(const em::private_key_shim&) const {
+         FC_THROW_EXCEPTION(exception, "EM keys do not generate shared secrets");
+      }
+
+      sha512 operator()(const ed::private_key_shim&) const {
+         FC_THROW_EXCEPTION(exception, "ED keys do not generate shared secrets");
+      }
+
       const public_key::storage_type&  _pub_storage;
    };
 

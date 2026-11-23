@@ -12,14 +12,17 @@ namespace fc { namespace crypto {
       constexpr const char* private_key_base_prefix = "PVT";
       constexpr const char* private_key_prefix[] = {
          "K1",
-         "R1"
+         "R1",
+         "EM", // alcor-chain
+         "ED"  // alcor-chain
       };
    };
 
    class private_key
    {
       public:
-         using storage_type = std::variant<ecc::private_key_shim, r1::private_key_shim>;
+         // 0 K1, 1 R1, 2 EM (alcor-chain), 3 ED (alcor-chain)
+         using storage_type = std::variant<ecc::private_key_shim, r1::private_key_shim, em::private_key_shim, ed::private_key_shim>;
 
          private_key() = default;
          private_key( private_key&& ) = default;

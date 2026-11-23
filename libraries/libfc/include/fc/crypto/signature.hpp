@@ -3,6 +3,8 @@
 #include <fc/crypto/elliptic.hpp>
 #include <fc/crypto/elliptic_r1.hpp>
 #include <fc/crypto/elliptic_webauthn.hpp>
+#include <fc/crypto/elliptic_em.hpp>
+#include <fc/crypto/elliptic_ed.hpp>
 #include <fc/reflect/reflect.hpp>
 #include <fc/reflect/variant.hpp>
 
@@ -12,14 +14,18 @@ namespace fc { namespace crypto {
       constexpr const char* signature_prefix[] = {
          "K1",
          "R1",
-         "WA"
+         "WA",
+         "EM", // alcor-chain
+         "ED"  // alcor-chain
       };
    };
 
    class signature
    {
       public:
-         using storage_type = std::variant<ecc::signature_shim, r1::signature_shim, webauthn::signature>;
+         // 0 K1, 1 R1, 2 WA, 3 EM (alcor-chain, r ‖ s ‖ v), 4 ED (alcor-chain, public key ‖ signature)
+         using storage_type = std::variant<ecc::signature_shim, r1::signature_shim, webauthn::signature,
+                                           em::signature_shim, ed::signature_shim>;
 
          signature() = default;
          signature( signature&& ) = default;

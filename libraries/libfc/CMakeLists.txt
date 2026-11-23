@@ -49,6 +49,9 @@ set( fc_sources
      src/crypto/elliptic_secp256k1.cpp
      src/crypto/elliptic_r1.cpp
      src/crypto/elliptic_webauthn.cpp
+     src/crypto/elliptic_em.cpp
+     src/crypto/elliptic_ed.cpp
+     src/crypto/signing_message.cpp
      src/crypto/rand.cpp
      src/crypto/public_key.cpp
      src/crypto/private_key.cpp

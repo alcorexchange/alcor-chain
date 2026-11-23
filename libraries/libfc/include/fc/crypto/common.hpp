@@ -6,7 +6,19 @@
 #include <fc/utility.hpp>
 #include <fc/static_variant.hpp>
 
+#include <concepts>
+
 namespace fc { namespace crypto {
+   /**
+    * Key types whose string data is not the checksummed base58 of their bytes (the alcor-chain EM and ED keys) print
+    * and parse it themselves: "<PREFIX>_" + to_data_string(), e.g. PUB_EM_04..., SIG_ED_...
+    */
+   template<typename KeyType>
+   concept has_own_string_form = requires(const KeyType& key, const std::string& data) {
+      { key.to_data_string() } -> std::same_as<std::string>;
+      { KeyType::from_data_string(data) } -> std::same_as<KeyType>;
+   };
+
    template<typename DataType>
    struct checksummed_data {
       checksummed_data() {}
@@ -41,6 +53,9 @@ namespace fc { namespace crypto {
          constexpr auto prefix = Prefixes[Position];
 
          if (prefix == prefix_str) {
+            if constexpr (has_own_string_form<KeyType>) {
+               return Result(KeyType::from_data_string(data_str));
+            }
             auto bin = fc::from_base58(data_str);
             fc::datastream<const char*> unpacker(bin.data(), bin.size());
             wrapper wrapped;
@@ -94,6 +109,11 @@ namespace fc { namespace crypto {
          using data_type = typename KeyType::data_type;
          constexpr int position = fc::get_index<Storage, KeyType>();
          constexpr bool is_default = position == DefaultPosition;
+
+         if constexpr (has_own_string_form<KeyType>) {
+            static_assert(!is_default);
+            return std::string(Prefixes[position]) + "_" + key.to_data_string();
+         }
 
          checksummed_data<data_type> wrapper;
          wrapper.data = key.serialize();
