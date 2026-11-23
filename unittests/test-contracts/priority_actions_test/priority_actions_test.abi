@@ -1,0 +1,38 @@
+{
+    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT ",
+    "version": "eosio::abi/1.2",
+    "types": [],
+    "structs": [
+        {
+            "name": "delrow",
+            "base": "",
+            "fields": []
+        },
+        {
+            "name": "setrow",
+            "base": "",
+            "fields": [
+                {
+                    "name": "value",
+                    "type": "bytes"
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "name": "delrow",
+            "type": "delrow",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "setrow",
+            "type": "setrow",
+            "ricardian_contract": ""
+        }
+    ],
+    "tables": [],
+    "ricardian_clauses": [],
+    "variants": [],
+    "action_results": []
+}

@@ -76,6 +76,7 @@ target_include_directories(eosio_rapidjson INTERFACE ../rapidjson/include)
 add_library( eosio_chain
              name.cpp
              transaction.cpp
+             priority_actions.cpp
              block.cpp
              block_handle.cpp
              block_header.cpp

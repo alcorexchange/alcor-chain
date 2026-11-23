@@ -1,0 +1,6 @@
+if( EOSIO_COMPILE_TEST_CONTRACTS )
+   add_contract( priority_actions_test priority_actions_test priority_actions_test.cpp )
+else()
+   configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/priority_actions_test.wasm ${CMAKE_CURRENT_BINARY_DIR}/priority_actions_test.wasm COPYONLY )
+   configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/priority_actions_test.abi  ${CMAKE_CURRENT_BINARY_DIR}/priority_actions_test.abi  COPYONLY )
+endif()

@@ -11,6 +11,7 @@
 #include <eosio/chain/vote_message.hpp>
 #include <eosio/chain/finalizer.hpp>
 #include <eosio/chain/peer_keys_db.hpp>
+#include <eosio/chain/priority_actions.hpp>
 
 #include <chainbase/pinnable_mapped_file.hpp>
 
@@ -311,6 +312,9 @@ namespace eosio::chain {
          const block_signing_authority& pending_block_signing_authority()const;
          std::optional<block_id_type>   pending_producer_block_id()const;
          uint32_t                       pending_block_num()const;
+         // the system contract's priority action list (eosio table prioacts) in the current state; null when there
+         // is none or the row does not parse. A producer policy, not used in validation. Main thread only.
+         priority_actions_ptr           get_priority_actions()const;
 
          // returns producer_authority_schedule for a next block built from head with
          // `next_block_timestamp`

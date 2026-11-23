@@ -34,6 +34,7 @@
 #include <eosio/chain/vote_message.hpp>
 #include <eosio/chain/vote_processor.hpp>
 #include <eosio/chain/peer_keys_db.hpp>
+#include <eosio/chain/priority_actions.hpp>
 
 #include <chainbase/chainbase.hpp>
 #include <eosio/vm/allocator.hpp>
@@ -1011,6 +1012,8 @@ struct controller_impl {
    std::atomic<bool>               applying_block = false;
    platform_timer&                 main_thread_timer;
    peer_keys_db_t                  peer_keys_db;
+   std::string                     priority_row_bytes;     // last row seen by get_priority_actions
+   priority_actions_ptr            priority_row_actions;   // and its list
 
    thread_local static platform_timer timer; // a copy for main thread and each read-only thread
 #if defined(EOSIO_EOS_VM_RUNTIME_ENABLED) || defined(EOSIO_EOS_VM_JIT_RUNTIME_ENABLED)
@@ -3395,6 +3398,36 @@ struct controller_impl {
       return onblock_trace;
    } /// start_block
 
+   // The system contract's priority action list in the current state, null when there is none. Keeps the last row
+   // so an unchanged list is the same pointer and a bad row is logged once. Main thread only.
+   priority_actions_ptr get_priority_actions() {
+      const auto* tid = db.find<table_id_object, by_code_scope_table>(
+         boost::make_tuple(config::system_account_name, config::system_account_name, priority_actions_table));
+      const auto* row = tid ? db.find<key_value_object, by_scope_primary>(
+                                 boost::make_tuple(tid->id, priority_actions_table.to_uint64_t()))
+                            : nullptr;
+      if( !row ) {
+         priority_row_bytes.clear();
+         priority_row_actions.reset();
+         return {};
+      }
+
+      std::string_view bytes(row->value.data(), row->value.size());
+      if( bytes == priority_row_bytes )
+         return priority_row_actions;
+
+      priority_row_bytes = bytes;
+      priority_row_actions.reset();
+      try {
+         auto prio = unpack_priority_actions(bytes.data(), bytes.size());
+         if( !prio.empty() )
+            priority_row_actions = std::make_shared<const priority_actions>(std::move(prio));
+      } catch( const fc::exception& e ) {
+         elog( "ignoring the priority action list: ${e}", ("e", e.to_detail_string()) );
+      }
+      return priority_row_actions;
+   }
+
    void update_peer_keys() {
       if (!peer_keys_db.is_active())
          return;
@@ -5548,6 +5581,10 @@ block_timestamp_type controller::pending_block_timestamp()const {
 
 time_point controller::pending_block_time()const {
    return my->pending_block_time();
+}
+
+priority_actions_ptr controller::get_priority_actions()const {
+   return my->get_priority_actions();
 }
 
 uint32_t controller::pending_block_num()const {

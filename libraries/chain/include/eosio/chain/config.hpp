@@ -78,6 +78,8 @@ const static uint32_t   default_max_trx_delay                        = 45*24*360
 const static uint32_t   default_max_inline_action_size               = 512 * 1024;   // 512 KB
 const static uint16_t   default_max_inline_action_depth              = 4;
 const static uint16_t   default_max_auth_depth                       = 6;
+/// longest priority action list the node reads (eosio table prioacts); a longer one counts as none
+const static uint32_t   max_priority_actions                         = 64;
 const static uint32_t   default_sig_cpu_bill_pct                     = 50 * percent_1; // billable percentage of signature recovery
 const static uint32_t   default_produce_block_offset_ms              = 450;
 const static uint32_t   default_production_pause_vote_timeout_ms     = 6u*1000u; // 6 seconds
