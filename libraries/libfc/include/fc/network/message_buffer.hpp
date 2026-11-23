@@ -154,10 +154,14 @@ namespace fc {
      *  will be removed from the buffer chain.  If the read pointer becomes
      *  equal to the write pointer, the message buffer will be reset to
      *  its initial state (one buffer with read and write pointers at the
-     *  start).
+     *  start).  Throws, leaving the buffer as it was, if fewer bytes are buffered.
      */
-    void advance_read_ptr(uint32_t bytes) {
-      advance_index(read_ind, bytes);
+    void advance_read_ptr(size_t bytes) {
+      if (bytes > bytes_to_read()) {
+        FC_THROW_EXCEPTION( out_of_range_exception, "tried to advance ${r} but only ${s} left",
+                            ("r", bytes)( "s", bytes_to_read() ) );
+      }
+      advance_index(read_ind, static_cast<uint32_t>(bytes));
       if (read_ind == write_ind) {
         reset();
       } else if (read_ind.first > 0) {
@@ -253,15 +257,17 @@ namespace fc {
 
      /*
      *  Creates an mb_datastream object that can be used with the
-     *  fc library's unpack functionality.
+     *  fc library's unpack functionality. It reads at most `limit` bytes
+     *  (one message frame); reading more throws.
      */
-    mb_datastream<buffer_len> create_datastream();
+    mb_datastream<buffer_len> create_datastream(size_t limit);
 
     /*
      *  Creates an mb_peek_datastream object that can be used with the
-     *  fc library's unpack functionality.
+     *  fc library's unpack functionality. It peeks at most `limit` bytes
+     *  (one message frame); peeking more throws.
      */
-    mb_peek_datastream<buffer_len> create_peek_datastream();
+    mb_peek_datastream<buffer_len> create_peek_datastream(size_t limit);
 
   private:
     using buffer_type = std::array<char, buffer_len>;
@@ -291,10 +297,11 @@ namespace fc {
   template <uint32_t buffer_len>
   class mb_datastream {
      public:
-        explicit mb_datastream( message_buffer<buffer_len>& m ) : mb(m) {}
+        mb_datastream( message_buffer<buffer_len>& m, size_t limit ) : mb(m), left(limit) {}
 
-        inline void skip( size_t s ) { mb.advance_read_ptr(s); }
+        inline void skip( size_t s ) { take( "skip", s ); mb.advance_read_ptr(s); }
         inline bool read( char* d, size_t s ) {
+          take( "read", s );
           if (mb.bytes_to_read() >= s) {
             mb.read(d, s);
             return true;
@@ -302,16 +309,25 @@ namespace fc {
           fc::detail::throw_datastream_range_error( "read", mb.bytes_to_read(), s - mb.bytes_to_read());
         }
 
-        inline bool   get( unsigned char& c ) { return mb.read(&c, 1); }
-        inline bool   get( char& c ) { return mb.read(&c, 1); }
+        inline bool   get( unsigned char& c ) { return read(reinterpret_cast<char*>(&c), 1); }
+        inline bool   get( char& c ) { return read(&c, 1); }
+
+        size_t remaining() const { return left; }
 
       private:
+        void take( const char* op, size_t s ) {
+          if (s > left)
+            fc::detail::throw_datastream_range_error( op, left, s - left );
+          left -= s;
+        }
+
         message_buffer<buffer_len>& mb;
+        size_t                      left; // of the frame
   };
 
   template <uint32_t buffer_len>
-  inline mb_datastream<buffer_len> message_buffer<buffer_len>::create_datastream() {
-    return mb_datastream<buffer_len>(*this);
+  inline mb_datastream<buffer_len> message_buffer<buffer_len>::create_datastream(size_t limit) {
+    return mb_datastream<buffer_len>(*this, limit);
   }
 
   /*
@@ -322,12 +338,18 @@ namespace fc {
   template <uint32_t buffer_len>
   class mb_peek_datastream {
   public:
-     explicit mb_peek_datastream( const message_buffer<buffer_len>& m )
-     : mb( m ), index( m.read_index() ) {}
+     mb_peek_datastream( const message_buffer<buffer_len>& m, size_t limit )
+     : mb( m ), index( m.read_index() ), left( limit ) {}
 
-     inline void skip( size_t s ) { message_buffer<buffer_len>::advance_index( index, s ); }
+     inline void skip( size_t s ) {
+        take( "skip", s );
+        if( s > mb.bytes_to_read_from_index(index) )
+           fc::detail::throw_datastream_range_error( "skip", mb.bytes_to_read_from_index(index), s - mb.bytes_to_read_from_index(index) );
+        message_buffer<buffer_len>::advance_index( index, static_cast<uint32_t>(s) );
+     }
 
      inline bool read( char* d, size_t s ) {
+        take( "peek", s );
         if( mb.bytes_to_read_from_index(index) >= s ) {
            mb.peek( d, s, index );
            return true;
@@ -336,17 +358,24 @@ namespace fc {
               mb.bytes_to_read_from_index(index), s - mb.bytes_to_read_from_index(index) );
      }
 
-     inline bool get( unsigned char& c ) { return mb.peek( &c, 1, index ); }
-     inline bool get( char& c ) { return mb.peek( &c, 1, index ); }
+     inline bool get( unsigned char& c ) { return read( reinterpret_cast<char*>(&c), 1 ); }
+     inline bool get( char& c ) { return read( &c, 1 ); }
 
   private:
+     void take( const char* op, size_t s ) {
+        if( s > left )
+           fc::detail::throw_datastream_range_error( op, left, s - left );
+        left -= s;
+     }
+
      const message_buffer<buffer_len>& mb;
      typename message_buffer<buffer_len>::index_t index{0,0};
+     size_t left; // of the frame
   };
 
   template <uint32_t buffer_len>
-  inline mb_peek_datastream<buffer_len> message_buffer<buffer_len>::create_peek_datastream() {
-     return mb_peek_datastream<buffer_len>( *this );
+  inline mb_peek_datastream<buffer_len> message_buffer<buffer_len>::create_peek_datastream(size_t limit) {
+     return mb_peek_datastream<buffer_len>( *this, limit );
   }
 
 } // namespace fc

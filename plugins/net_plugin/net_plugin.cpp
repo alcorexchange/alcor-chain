@@ -916,6 +916,13 @@ namespace eosio {
       bool process_next_block_message(uint32_t message_length);
       bool process_next_trx_message(uint32_t message_length);
       bool process_next_vote_message(uint32_t message_length);
+      // a message is decoded within its frame (datastream limit = message length); the bytes of the frame the decoder
+      // did not use (fields of a newer peer, or junk) must not be read as the next frame
+      template <typename Stream>
+      void skip_rest_of_frame(Stream& ds) {
+         if (ds.remaining() > 0)
+            pending_message_buffer.advance_read_ptr(ds.remaining());
+      }
       void update_endpoints(const tcp::endpoint& endpoint = tcp::endpoint());
 
       void send_gossip_bp_peers_initial_message();
@@ -2988,7 +2995,7 @@ namespace eosio {
          auto now = latest_msg_time = std::chrono::steady_clock::now();
 
          // if next message is a block we already have, exit early
-         auto peek_ds = pending_message_buffer.create_peek_datastream();
+         auto peek_ds = pending_message_buffer.create_peek_datastream( message_length );
          unsigned_int which{};
          fc::raw::unpack( peek_ds, which );
 
@@ -3002,9 +3009,10 @@ namespace eosio {
          } else if( net_msg == msg_type_t::vote_message ) {
             return process_next_vote_message( message_length );
          } else {
-            auto ds = pending_message_buffer.create_datastream();
+            auto ds = pending_message_buffer.create_datastream( message_length );
             net_message msg;
             fc::raw::unpack( ds, msg );
+            skip_rest_of_frame( ds );
             msg_handler m( shared_from_this() );
             std::visit( m, msg );
          }
@@ -3019,7 +3027,7 @@ namespace eosio {
 
    // called from connection strand
    bool connection::process_next_block_message(uint32_t message_length) {
-      auto peek_ds = pending_message_buffer.create_peek_datastream();
+      auto peek_ds = pending_message_buffer.create_peek_datastream( message_length );
       unsigned_int which{};
       fc::raw::unpack( peek_ds, which ); // throw away
       block_header bh;
@@ -3068,12 +3076,13 @@ namespace eosio {
             return true;
       }
 
-      auto mb_ds = pending_message_buffer.create_datastream();
+      auto mb_ds = pending_message_buffer.create_datastream( message_length );
       fc::raw::unpack( mb_ds, which );
 
       fc::datastream_mirror ds(mb_ds, message_length);
       shared_ptr<signed_block> ptr = std::make_shared<signed_block>();
       fc::raw::unpack( ds, *ptr );
+      skip_rest_of_frame( mb_ds );
 
       bool has_webauthn_sig = ptr->producer_signature.is_webauthn();
 
@@ -3109,12 +3118,13 @@ namespace eosio {
 
       const unsigned long trx_in_progress_sz = this->trx_in_progress_size.load();
 
-      auto ds = pending_message_buffer.create_datastream();
+      auto ds = pending_message_buffer.create_datastream( message_length );
       unsigned_int which{};
       fc::raw::unpack( ds, which );
       // shared_ptr<packed_transaction> needed here because packed_transaction_ptr is shared_ptr<const packed_transaction>
       std::shared_ptr<packed_transaction> ptr = std::make_shared<packed_transaction>();
       fc::raw::unpack( ds, *ptr );
+      skip_rest_of_frame( ds );
       if( trx_in_progress_sz > def_max_trx_in_progress_size) {
          char reason[72];
          snprintf(reason, 72, "Dropping trx, too many trx in progress %lu bytes", trx_in_progress_sz);
@@ -3148,12 +3158,13 @@ namespace eosio {
          return true;
       }
 
-      auto ds = pending_message_buffer.create_datastream();
+      auto ds = pending_message_buffer.create_datastream( message_length );
       unsigned_int which{};
       fc::raw::unpack( ds, which );
       assert(to_msg_type_t(which) == msg_type_t::vote_message); // verified by caller
       vote_message_ptr ptr = std::make_shared<vote_message>();
       fc::raw::unpack( ds, *ptr );
+      skip_rest_of_frame( ds );
 
       handle_message( ptr );
       return true;
@@ -4768,6 +4779,10 @@ namespace eosio {
 
    // called by API
    string connections_manager::connect( const string& host, const string& p2p_address ) {
+      // an unparsable address would stay in supplied_peers for good, one entry per junk string
+      if (auto [h, port, type] = net_utils::split_host_port_type(host); h.empty()) {
+         return "invalid peer address";
+      }
       std::unique_lock g( connections_mtx );
       supplied_peers.insert(host);
       g.unlock();

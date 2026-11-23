@@ -322,7 +322,7 @@ BOOST_AUTO_TEST_CASE(message_buffer_datastream) {
    mbuff.advance_write_ptr(1024);
 
    for( int i = 0; i < 3; ++i ) {
-      auto ds2 = mbuff.create_peek_datastream();
+      auto ds2 = mbuff.create_peek_datastream(mbuff.bytes_to_read());
       fc::raw::unpack( ds2, v );
       BOOST_CHECK_EQUAL( 13, v );
       fc::raw::unpack( ds2, v );
@@ -333,7 +333,7 @@ BOOST_AUTO_TEST_CASE(message_buffer_datastream) {
    }
 
    {
-      auto ds2 = mbuff.create_datastream();
+      auto ds2 = mbuff.create_datastream(mbuff.bytes_to_read());
       fc::raw::unpack( ds2, v );
       BOOST_CHECK_EQUAL( 13, v );
       fc::raw::unpack( ds2, v );
@@ -359,14 +359,14 @@ BOOST_AUTO_TEST_CASE(message_buffer_datastream_tuple) {
    mbuff.advance_write_ptr(1024);
 
    for( int i = 0; i < 3; ++i ) {
-      auto ds2 = mbuff.create_peek_datastream();
+      auto ds2 = mbuff.create_peek_datastream(mbuff.bytes_to_read());
       my_tuple t2;
       fc::raw::unpack( ds2, t2 );
       BOOST_CHECK( t == t2 );
    }
 
    {
-      auto ds2 = mbuff.create_datastream();
+      auto ds2 = mbuff.create_datastream(mbuff.bytes_to_read());
       my_tuple t2;
       fc::raw::unpack( ds2, t2 );
       BOOST_CHECK( t == t2 );
@@ -388,11 +388,51 @@ BOOST_AUTO_TEST_CASE(message_buffer_datastream_variadic_pack_unpack) {
    mbuff.advance_write_ptr(1024);
 
    for( int i = 0; i < 3; ++i ) {
-      auto ds2 = mbuff.create_peek_datastream();
+      auto ds2 = mbuff.create_peek_datastream(mbuff.bytes_to_read());
       my_tuple t2;
       fc::raw::unpack( ds2, std::get<0>(t2), std::get<1>(t2),  std::get<2>(t2) );
       BOOST_CHECK( t == t2 );
    }
+}
+
+// A message is decoded within its frame: the streams stop at the limit, reading past it throws without moving
+// the read pointer past the frame, and advancing past the buffered bytes throws and leaves the buffer as it was.
+BOOST_AUTO_TEST_CASE(message_buffer_frame_limit) {
+   fc::message_buffer<16> mbuff; // small buffers: frames span several of them
+   const std::string bytes = "0123456789abcdefghijklmnopqrstuvwxyz";
+   memcpy(mbuff.write_ptr(), bytes.data(), 16);
+   mbuff.advance_write_ptr(16);
+   memcpy(mbuff.write_ptr(), bytes.data() + 16, 16);
+   mbuff.advance_write_ptr(16);
+   BOOST_REQUIRE_EQUAL(mbuff.bytes_to_read(), 32u);
+
+   char out[32];
+   {
+      auto peek = mbuff.create_peek_datastream(20);
+      BOOST_CHECK(peek.read(out, 20));
+      BOOST_CHECK_THROW(peek.read(out, 1), fc::out_of_range_exception);
+      BOOST_CHECK_EQUAL(mbuff.bytes_to_read(), 32u); // peeking does not move the read pointer
+   }
+   {
+      auto peek = mbuff.create_peek_datastream(20);
+      peek.skip(19);
+      BOOST_CHECK_THROW(peek.skip(2), fc::out_of_range_exception);
+   }
+   {
+      auto ds = mbuff.create_datastream(20);
+      BOOST_CHECK(ds.read(out, 18));
+      BOOST_CHECK_EQUAL(std::string(out, 18), bytes.substr(0, 18));
+      BOOST_CHECK_THROW(ds.read(out, 3), fc::out_of_range_exception);
+      BOOST_CHECK_EQUAL(mbuff.bytes_to_read(), 14u); // nothing of the next frame was taken
+      BOOST_CHECK_EQUAL(ds.remaining(), 2u);
+      mbuff.advance_read_ptr(ds.remaining());
+      BOOST_CHECK_EQUAL(mbuff.bytes_to_read(), 12u);
+   }
+   BOOST_CHECK_THROW(mbuff.advance_read_ptr(13), fc::out_of_range_exception);
+   BOOST_CHECK_THROW(mbuff.advance_read_ptr(size_t{1} << 32), fc::out_of_range_exception);
+   BOOST_CHECK_EQUAL(mbuff.bytes_to_read(), 12u);
+   BOOST_CHECK(mbuff.read(out, 12));
+   BOOST_CHECK_EQUAL(std::string(out, 12), bytes.substr(20, 12));
 }
 
 // Make sure that the memory allocation is thread-safe.
