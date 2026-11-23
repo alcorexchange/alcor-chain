@@ -7,6 +7,7 @@
 #include <fc/crypto/blake2.hpp>
 #include <fc/crypto/sha3.hpp>
 #include <fc/crypto/k1_recover.hpp>
+#include <fc/crypto/elliptic_ed.hpp>
 #include <bn256/bn256.h>
 #include <bls12-381/bls12-381.hpp>
 
@@ -221,6 +222,15 @@ namespace eosio::chain::webassembly {
 
       std::memcpy( out.data(), res.data(), res.size() );
       return return_code::success;
+   }
+
+   int32_t interface::ed25519_verify( span<const char> msg, span<const char> sig, span<const char> pub ) const {
+      if( sig.size() != fc::ed::detached_signature_size || pub.size() != fc::ed::public_key_size ||
+          msg.size() > config::ed25519_verify_max_message_size )
+         return return_code::failure;
+      const bool valid = fc::ed::verify_detached( sig.data(), msg.data(), msg.size(), pub.data() );
+      context.trx_context.checktime();
+      return valid ? return_code::success : return_code::failure;
    }
 
    void interface::sha3( span<const char> input, span<char> output, int32_t keccak ) const {

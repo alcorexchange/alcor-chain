@@ -170,7 +170,8 @@ const std::vector<const char*> genesis_intrinsics = {
    "memcpy",
    "memmove",
    "memcmp",
-   "memset"
+   "memset",
+   "ed25519_verify" // alcor-chain: from genesis, no protocol feature
 };
 
 } } // namespace eosio::chain
