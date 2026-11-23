@@ -11,12 +11,14 @@ finality proofs. It is open for the Antelope community to run, review and take f
 
 - **200 ms blocks.** Block interval 200 ms, block timestamp epoch 2025-01-01 (genesis must not be earlier).
   Contracts that use block time need the matching constants in CDT.
-- **Priority actions** (protocol feature `PRIORITY_ACTIONS`). The system contract keeps a list of
-  (contract, action) pairs, set by the block producers' multisig (`eosio::setprioacts`, at most 64). A transaction made
-  only of listed actions is a priority transaction and goes before all others in a block; a block with a priority
-  transaction after a regular one is invalid. Meant for order cancellations, so a market maker's cancel is not stuck
-  behind a burst of takers. The producer applies queued priority transactions first and restarts a block once for a
-  late one.
+- **Priority actions** (cancels first in a block). The system contract keeps a list of (contract, action) pairs, set
+  by the block producers' multisig (`eosio::setprioacts`, at most 64). A transaction made only of listed actions is a
+  priority transaction. While the list is not empty, the producer does not apply transactions as they come: near the
+  end of its slot it applies them in one batch, priority transactions first, then the rest in the order they came.
+  So a market maker's cancel goes before every taker in the same block, whoever was faster, and nothing is applied
+  twice. It is a block producer policy, not a consensus rule: every block must have its priority transactions
+  first, and anyone can check that. Market makers should still send cancels to the current and next producer, use
+  `cloid` and `expires_at`.
 - **Security fixes:**
   - BLS host functions (`bls_g1_weighted_sum`, `bls_g2_weighted_sum`, `bls_pairing`) check span sizes in 64 bits. In 32
     bits a large count wrapped, and the node tried to allocate tens of GB.
