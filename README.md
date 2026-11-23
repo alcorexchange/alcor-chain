@@ -1,4 +1,38 @@
-# Spring
+# alcor-chain
+
+alcor-chain is an [Antelope](https://github.com/AntelopeIO) chain node built for on-chain trading. It is a fork of
+[Spring](https://github.com/AntelopeIO/spring) v1.2.2 (Savanna consensus) and keeps its tools, APIs and
+light-client finality proofs.
+
+**Status: pre-release, for testnets.** Not for production.
+
+## What differs from Spring 1.2.2
+
+- **200 ms blocks.** Block interval 200 ms, block timestamp epoch 2025-01-01 (genesis must not be earlier).
+  Contracts that use block time need the matching constants in CDT.
+- **Priority actions** (protocol feature `PRIORITY_ACTIONS`). The system contract keeps a list of
+  (contract, action) pairs, set by the block producers' multisig (`eosio::setprioacts`, at most 64). A transaction made
+  only of listed actions is a priority transaction and goes before all others in a block; a block with a priority
+  transaction after a regular one is invalid. Meant for order cancellations, so a market maker's cancel is not stuck
+  behind a burst of takers. The producer applies queued priority transactions first and restarts a block once for a
+  late one.
+- **Security fixes:**
+  - BLS host functions (`bls_g1_weighted_sum`, `bls_g2_weighted_sum`, `bls_pairing`) check span sizes in 64 bits. In 32
+    bits a large count wrapped, and the node tried to allocate tens of GB.
+  - A failed transaction is charged to its first authorizer (subjective billing, failure limit) only after its
+    authorizations were verified. Before, anyone could charge any account.
+  - P2P messages are decoded within their frame.
+  - State history limits unanswered status requests per session.
+  - The Savanna vote aggregator no longer gives up on a strong QC that is still reachable.
+  - SHA-3 works on big-endian hosts.
+- **Fixes from open Spring pull requests:** the strong-QC lockout fix (#1888), the replay, sync and test fixes
+  (#1873–#1881), and the pinned package and tarball hash checks.
+
+The chain's system contracts (with `setprioacts`) are in a separate repository.
+
+---
+
+## Spring
 
 1. [Branches](#branches)
 2. [Supported Operating Systems](#supported-operating-systems)
