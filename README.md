@@ -16,20 +16,20 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | History API (Hyperion) | https://history.acc.alcor.exchange ([docs](https://history.acc.alcor.exchange/v2/docs)) |
 | Explorer | https://explorer.alcor.exchange/acc |
 | P2P | `p2p.acc.alcor.exchange:9876` (block producers: send us your node's IP, the port is allowlisted) |
-| Chain ID | `9ae36fa71c10a5494664d3e1f9c67fba5dca35d316848a57a8df115ad306978f` |
+| Chain ID | `9a240245154fe822b0d6dcb2247a0f59a1b0b7f49eb6ff4829f0066060f562ef` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
-| Block time | 200 ms, Savanna finality |
+| Block time | 200 ms, 30 blocks per producer round, Savanna finality |
 | Release | [`v1.2.2-alcor-testnet.1`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.1) |
 | Chat | https://t.me/antelopecommunitychain |
 
-Wallets (Anchor, WharfKit and others): add a custom network with the chain ID and API above. Test HORN has no value.
+Wallets (Anchor, WharfKit and others): add a custom network with the chain ID and API above. MetaMask and Phantom
+keys work too: the faucet makes an account for them (buttons "Use MetaMask" / "Use Phantom"). Test HORN has no value.
 
 ### Run a node
 
-Install the `.deb` from the [release](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.1)
-(Ubuntu 22.04 and 24.04), or build the same package yourself with Spring's pinned reproducible build. It runs in Docker,
-so the host's compilers do not matter (Ubuntu 24.04 has no LLVM 11), and the result should match the release's sha256:
+Build the package with Spring's pinned reproducible build (a ready `.deb` in the release follows once our build
+server is up). It runs in Docker, so the host's compilers do not matter (Ubuntu 24.04 has no LLVM 11):
 
 ```bash
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
@@ -72,7 +72,7 @@ nodeos --genesis-json testnet/genesis.json \
 Generate fresh testnet keys on your own machine (never reuse mainnet keys) and send us only the public parts in the chat:
 
 - account owner and active keys: `cleos create key --to-console`
-- a block signing key: `cleos create key --to-console`
+- a block signing key: `cleos create key --to-console` (K1; EM and ED keys cannot sign blocks)
 - a BLS finalizer key with its proof of possession: `spring-util bls create key --to-console`
 - your node's public IP and p2p port
 
@@ -88,12 +88,25 @@ signature-provider = <BLS public key>=KEY:<BLS private key>
 
 - [system-contracts](https://github.com/alcorexchange/system-contracts): eosio.system with `setprioacts` and 200 ms block counts
 - [cdt](https://github.com/alcorexchange/cdt): CDT with the block interval and epoch as build options; contracts for this chain need it
+- [hyperion](https://github.com/alcorexchange/hyperion), [node-abieos](https://github.com/alcorexchange/node-abieos),
+  [abieos](https://github.com/alcorexchange/abieos): history API and ABI serializer with EM/ED keys and 200 ms blocks
 
 
 ## What differs from Spring 1.2.2
 
 - **200 ms blocks.** Block interval 200 ms, block timestamp epoch 2025-01-01 (genesis must not be earlier).
   Contracts that use block time need the matching constants in CDT.
+- **30 blocks per producer round** (Spring: 12). A producer hands over every 6 s instead of every 2.4 s, so the
+  pause at each handover (the next producer waits for the last block of the previous one) costs less time.
+- **EM and ED account keys, from genesis.** EM = secp256k1 as in Ethereum wallets (MetaMask, Rabby), ED = ed25519 as
+  in Solana wallets (Phantom). `PUB_EM_04<hex>` / `PUB_ED_<base58>`, signatures `SIG_EM_0x<r s v>` /
+  `SIG_ED_<base58 of key and signature>`. The wallet signs a readable text, not a bare hash:
+  `Alcor Chain transaction` / `Sign only in an app you trust` / the transaction digest in hex, as an EIP-191 personal
+  message (EM) or an ed25519 message (ED); the node rebuilds exactly this text. One encoding per EM signature
+  (v 27 or 28, low s). EM and ED keys work in account permissions only, never as block signing keys.
+  `cleos create key --em` / `--ed`.
+- **`ed25519_verify` host function, from genesis:** `ed25519_verify(msg, sig, pub)` returns 0 for a valid signature,
+  -1 otherwise; messages up to 64 KiB. Ed25519 is libsodium 1.0.22, built in.
 - **Priority actions** (cancels first in a block). The system contract keeps a list of (contract, action) pairs, set
   by the block producers' multisig (`eosio::setprioacts`, at most 64). A transaction made only of listed actions is a
   priority transaction. While the list is not empty, the producer does not apply transactions as they come: near the
