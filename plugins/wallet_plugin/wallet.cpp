@@ -178,6 +178,10 @@ public:
          priv_key = fc::crypto::private_key::generate<fc::ecc::private_key_shim>();
       else if(key_type == "R1")
          priv_key = fc::crypto::private_key::generate<fc::crypto::r1::private_key_shim>();
+      else if(key_type == "EM")
+         priv_key = fc::crypto::private_key::generate<fc::em::private_key_shim>();
+      else if(key_type == "ED")
+         priv_key = fc::crypto::private_key::generate<fc::ed::private_key_shim>();
       else
          EOS_THROW(chain::unsupported_key_type_exception, "Key type \"${kt}\" not supported by software wallet", ("kt", key_type));
 
