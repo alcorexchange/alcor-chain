@@ -7,6 +7,8 @@
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <boost/multi_index/composite_key.hpp>
+#include <boost/multi_index/mem_fun.hpp>
 
 namespace eosio { namespace chain {
 
@@ -27,9 +29,14 @@ struct unapplied_transaction {
    trx_enum_type                  trx_type = trx_enum_type::unknown;
    bool                           return_failure_trace = false;
    next_func_t                    next;
+   uint64_t                       seq = 0; ///< arrival order in the queue
 
    const transaction_id_type& id()const { return trx_meta->id(); }
    fc::time_point_sec expiration()const { return trx_meta->packed_trx()->expiration(); }
+   /// forked, then aborted, then all incoming: api and p2p trxs take one arrival order, neither goes first
+   uint8_t rank()const {
+      return trx_type == trx_enum_type::incoming_api || trx_type == trx_enum_type::incoming_p2p ? 3 : uint8_t(trx_type);
+   }
 };
 
 /**
@@ -46,7 +53,12 @@ private:
          hashed_unique< tag<by_trx_id>,
                const_mem_fun<unapplied_transaction, const transaction_id_type&, &unapplied_transaction::id>
          >,
-         ordered_non_unique< tag<by_type>, member<unapplied_transaction, trx_enum_type, &unapplied_transaction::trx_type> >,
+         ordered_unique< tag<by_type>,
+               composite_key< unapplied_transaction,
+                     const_mem_fun<unapplied_transaction, uint8_t, &unapplied_transaction::rank>,
+                     member<unapplied_transaction, uint64_t, &unapplied_transaction::seq>
+               >
+         >,
          ordered_non_unique< tag<by_expiry>, const_mem_fun<unapplied_transaction, fc::time_point_sec, &unapplied_transaction::expiration> >
       >
    > unapplied_trx_queue_type;
@@ -55,6 +67,7 @@ private:
    uint64_t max_transaction_queue_size = 1024*1024*1024; // enforced for incoming
    uint64_t size_in_bytes = 0;
    size_t incoming_count = 0;
+   uint64_t next_seq = 0;
 
 public:
 
@@ -127,13 +140,13 @@ public:
    }
 
    void add_forked( const transaction_metadata_ptr& trx ) {
-      auto insert_itr = queue.insert( { trx, trx_enum_type::forked } );
+      auto insert_itr = queue.insert( { trx, trx_enum_type::forked, false, {}, ++next_seq } );
       if( insert_itr.second ) added( insert_itr.first );
    }
 
    void add_aborted( deque<transaction_metadata_ptr> aborted_trxs ) {
       for( auto& trx : aborted_trxs ) {
-         auto insert_itr = queue.insert( { std::move( trx ), trx_enum_type::aborted } );
+         auto insert_itr = queue.insert( { std::move( trx ), trx_enum_type::aborted, false, {}, ++next_seq } );
          if( insert_itr.second ) added( insert_itr.first );
       }
    }
@@ -141,8 +154,9 @@ public:
    void add_incoming( const transaction_metadata_ptr& trx, bool api_trx, bool return_failure_trace, next_func_t next ) {
       auto itr = queue.get<by_trx_id>().find( trx->id() );
       if( itr == queue.get<by_trx_id>().end() ) {
+         check_incoming_size( trx ); // before inserting: a refused trx must not stay in the queue
          auto insert_itr = queue.insert(
-               { trx, api_trx ? trx_enum_type::incoming_api : trx_enum_type::incoming_p2p, return_failure_trace, std::move( next ) } );
+               { trx, api_trx ? trx_enum_type::incoming_api : trx_enum_type::incoming_p2p, return_failure_trace, std::move( next ), ++next_seq } );
          if( insert_itr.second ) added( insert_itr.first );
       } else {
          if( itr->trx_meta == trx ) return; // same trx meta pointer
@@ -160,9 +174,9 @@ public:
 
    // forked, aborted
    iterator unapplied_begin() { return queue.get<by_type>().begin(); }
-   iterator unapplied_end() { return queue.get<by_type>().upper_bound( trx_enum_type::aborted ); }
+   iterator unapplied_end() { return queue.get<by_type>().lower_bound( boost::make_tuple( uint8_t(3) ) ); }
 
-   iterator incoming_begin() { return queue.get<by_type>().lower_bound( trx_enum_type::incoming_api ); }
+   iterator incoming_begin() { return queue.get<by_type>().lower_bound( boost::make_tuple( uint8_t(3) ) ); }
    iterator incoming_end() { return queue.get<by_type>().end(); } // if changed to upper_bound, verify usage performance
 
    iterator lower_bound( const transaction_id_type& id ) {
@@ -178,18 +192,23 @@ public:
    }
 
 private:
+   // Upstream checked this in added(), after the insert: a refused trx stayed queued but uncounted, and removed()
+   // later subtracted its size, so size_in_bytes drifted down and could wrap.
+   void check_incoming_size( const transaction_metadata_ptr& trx ) const {
+      auto size = calc_size( trx );
+      EOS_ASSERT( size_in_bytes + size < max_transaction_queue_size, tx_resource_exhaustion,
+                  "Transaction ${id}, size ${s} bytes would exceed configured "
+                  "incoming-transaction-queue-size-mb ${qs}, current queue size ${cs} bytes",
+                  ("id", trx->id())("s", size)("qs", max_transaction_queue_size/(1024*1024))
+                  ("cs", size_in_bytes) );
+   }
+
    template<typename Itr>
    void added( Itr itr ) {
-      auto size = calc_size( itr->trx_meta );
       if( itr->trx_type == trx_enum_type::incoming_p2p || itr->trx_type == trx_enum_type::incoming_api ) {
          ++incoming_count;
-         EOS_ASSERT( size_in_bytes + size < max_transaction_queue_size, tx_resource_exhaustion,
-                     "Transaction ${id}, size ${s} bytes would exceed configured "
-                     "incoming-transaction-queue-size-mb ${qs}, current queue size ${cs} bytes",
-                     ("id", itr->trx_meta->id())("s", size)("qs", max_transaction_queue_size/(1024*1024))
-                     ("cs", size_in_bytes) );
       }
-      size_in_bytes += size;
+      size_in_bytes += calc_size( itr->trx_meta );
    }
 
    template<typename Itr>

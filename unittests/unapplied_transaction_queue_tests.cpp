@@ -430,4 +430,40 @@ BOOST_AUTO_TEST_CASE( unapplied_transaction_queue_incoming_count ) try {
 
 } FC_LOG_AND_RETHROW() /// unapplied_transaction_queue_incoming_count
 
+// api and p2p trxs take one arrival order (the producer's batch applies the queue in this order), after forked
+// and aborted ones
+BOOST_AUTO_TEST_CASE( unapplied_transaction_queue_arrival_order ) try {
+   unapplied_transaction_queue q;
+   auto a1 = unique_trx_meta_data(), p1 = unique_trx_meta_data(), a2 = unique_trx_meta_data(), p2 = unique_trx_meta_data();
+   auto f1 = unique_trx_meta_data(), ab1 = unique_trx_meta_data();
+   q.add_incoming( p1, false, false, [](auto){} );
+   q.add_incoming( a1, true, false, [](auto){} );
+   q.add_forked( f1 );
+   q.add_incoming( p2, false, false, [](auto){} );
+   q.add_aborted( {ab1} );
+   q.add_incoming( a2, true, false, [](auto){} );
+
+   BOOST_CHECK( next( q ) == f1 );
+   BOOST_CHECK( next( q ) == ab1 );
+   BOOST_CHECK( next( q ) == p1 );
+   BOOST_CHECK( next( q ) == a1 );
+   BOOST_CHECK( next( q ) == p2 );
+   BOOST_CHECK( next( q ) == a2 );
+   BOOST_CHECK( q.empty() );
+} FC_LOG_AND_RETHROW()
+
+// a trx refused for the queue size is not left in the queue, and the size stays right
+BOOST_AUTO_TEST_CASE( unapplied_transaction_queue_full ) try {
+   unapplied_transaction_queue q;
+   auto t1 = unique_trx_meta_data(), t2 = unique_trx_meta_data();
+   q.add_incoming( t1, false, false, [](auto){} );
+   q.set_max_transaction_queue_size( 1 ); // smaller than any trx
+   BOOST_CHECK_THROW( q.add_incoming( t2, false, false, [](auto){} ), tx_resource_exhaustion );
+   BOOST_CHECK_EQUAL( q.size(), 1u );
+   BOOST_CHECK_EQUAL( q.incoming_size(), 1u );
+   BOOST_CHECK( !q.get_trx( t2->id() ) );
+   BOOST_CHECK( next( q ) == t1 );
+   BOOST_CHECK( q.empty() );
+} FC_LOG_AND_RETHROW()
+
 BOOST_AUTO_TEST_SUITE_END()
