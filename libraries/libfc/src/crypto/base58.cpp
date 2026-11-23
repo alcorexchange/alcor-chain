@@ -616,6 +616,9 @@ inline bool DecodeBase58(const std::string& str, std::vector<unsigned char>& vch
 namespace fc {
 
 std::string to_base58( const char* d, size_t s, const fc::yield_function_t& yield ) {
+  if( s == 0 )
+     return std::string();
+  FC_ASSERT( d != nullptr, "to_base58 of ${s} bytes from a null pointer", ("s", s) );
   return EncodeBase58( (const unsigned char*)d, (const unsigned char*)d+s, yield );
 }
 

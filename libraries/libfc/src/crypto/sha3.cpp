@@ -3,6 +3,7 @@
 #include <fc/fwd_impl.hpp>
 #include <openssl/sha.h>
 #include <string.h>
+#include <bit>
 #include <cmath>
 #include <fc/crypto/sha3.hpp>
 #include <fc/variant.hpp>
@@ -15,15 +16,8 @@ namespace fc
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-#if defined(__BYTE_ORDER__)
-#if defined(__ORDER_LITTLE_ENDIAN__)
-inline constexpr bool is_little_endian = true;
-#else
-inline constexpr bool is_little_endian = false;
-#endif
-#else
-#error "sha3 implementation needs __BYTE_ORDER__ and __ORDER_LITTLE/BIG_ENDIAN__ defined"
-#endif
+// the target's byte order; __ORDER_LITTLE_ENDIAN__ alone is defined on every target, big-endian ones too
+inline constexpr bool is_little_endian = std::endian::native == std::endian::little;
 
 #if defined(__builtin_rotateleft64)
 __attribute__ ((always_inline))
@@ -74,7 +68,7 @@ struct sha3_impl {
 		{
 			uint8_t *v;
 			// convert the buffer to little endian
-			for (std::size_t i; i < number_of_words; i++)
+			for (std::size_t i = 0; i < number_of_words; i++)
 			{
 				v = reinterpret_cast<uint8_t *>(words + i);
 				words[i] = ((uint64_t)v[0]) | (((uint64_t)v[1]) << 8) |
@@ -126,7 +120,7 @@ struct sha3_impl {
 			uint8_t *v;
 			uint64_t tmp;
 			// convert back to big endian
-			for (std::size_t i = 0; i < sizeof(words); i++)
+			for (std::size_t i = 0; i < number_of_words; i++) // lanes, not bytes
 			{
 				v = (uint8_t *)(words + i);
 				tmp = words[i];
