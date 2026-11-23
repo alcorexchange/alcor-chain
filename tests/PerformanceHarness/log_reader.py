@@ -19,7 +19,7 @@ Print = Utils.Print
 errorExit = Utils.errorExit
 cmdError = Utils.cmdError
 
-COMPLETEPRODUCTIONWINDOWSIZE = 12
+COMPLETEPRODUCTIONWINDOWSIZE = Utils.ProducerRepetitions
 
 @dataclass
 class ArtifactPaths:

@@ -267,7 +267,7 @@ class Node(Transactions):
 
         assert self.isProducer, 'missedNextProductionRound can be only called on a producer'
 
-        blocksPerProducer = 12
+        blocksPerProducer = Utils.ProducerRepetitions
 
         scheduled_producers = []
         schedule = self.processUrllibRequest("chain", "get_producer_schedule")

@@ -59,7 +59,7 @@ try:
 
     # verify node A is killed
     numPasses = 2
-    blocksPerProducer = 12
+    blocksPerProducer = Utils.ProducerRepetitions
     blocksPerRound = totalProducers * blocksPerProducer
     count = blocksPerRound * numPasses
     while prodA.verifyAlive() and count > 0:

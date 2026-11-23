@@ -69,9 +69,9 @@ def verifyProductionRounds(trans, node, prodsActive, rounds):
         if lastBlockProducer==blockProducer:
             saw+=1;
         else:
-            if saw>=12:
+            if saw>=Utils.ProducerRepetitions:
                 startingFrom=blockNum
-                if saw>12:
+                if saw>Utils.ProducerRepetitions:
                     Utils.Print("ERROR!!!!!!!!!!!!!!      saw=%s, blockProducer=%s, blockNum=%s" % (saw,blockProducer,blockNum))
                 break
             else:
@@ -98,14 +98,14 @@ def verifyProductionRounds(trans, node, prodsActive, rounds):
         prodsSeen={}
         lastBlockProducer=None
         for j in range(0, 21):
-            # each new set of 12 blocks should have a different blockProducer 
+            # each new set of Utils.ProducerRepetitions blocks should have a different blockProducer 
             if lastBlockProducer is not None and lastBlockProducer==node.getBlockProducerByNum(blockNum):
                 Utils.cmdError("expected blockNum %s to be produced by any of the valid producers except %s" % (blockNum, lastBlockProducer))
                 Utils.errorExit("Failed because of incorrect block producer order")
 
-            # make sure that the next set of 12 blocks all have the same blockProducer
+            # make sure that the next set of Utils.ProducerRepetitions blocks all have the same blockProducer
             lastBlockProducer=node.getBlockProducerByNum(blockNum)
-            for k in range(0, 12):
+            for k in range(0, Utils.ProducerRepetitions):
                 validBlockProducer(prodsActive, prodsSeen, blockNum, node1)
                 blockProducer=node.getBlockProducerByNum(blockNum)
                 if lastBlockProducer!=blockProducer:

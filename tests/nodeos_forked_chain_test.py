@@ -321,8 +321,8 @@ try:
     productionCycle=[]
     producerToSlot={}
     slot=-1
-    inRowCountPerProducer=12
-    minNumBlocksPerProducer=10
+    inRowCountPerProducer=Utils.ProducerRepetitions
+    minNumBlocksPerProducer=Utils.ProducerRepetitions-2
     lastTimestamp=timestamp
     headBlockNum=node.getBlockNum()
     firstBlockForWindowMissedSlot=None

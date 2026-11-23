@@ -101,7 +101,7 @@ try:
     #verify that the non producing node is not alive (and populate the producer nodes with current getInfo data to report if
     #an error occurs)
     numPasses = 2
-    blocksPerProducer = 12
+    blocksPerProducer = Utils.ProducerRepetitions
     blocksPerRound = totalProducers * blocksPerProducer
     count = blocksPerRound * numPasses
     while nonProdNode.verifyAlive() and count > 0:

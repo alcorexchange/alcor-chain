@@ -93,9 +93,9 @@ try:
     # should take effect in first block of defproducerg slot (so defproducerh)
     assert cluster.setProds(["defproducerb", "defproducerh", "defproducerm", "defproducerr"]), "setprods failed"
     setProdsBlockNum = cluster.biosNode.getBlockNum()
-    assert cluster.biosNode.waitForBlock(setProdsBlockNum+12+12+1), "Block of new producers not reached"
+    assert cluster.biosNode.waitForBlock(setProdsBlockNum+2*Utils.ProducerRepetitions+1), "Block of new producers not reached"
     assert cluster.biosNode.getInfo(exitOnError=True)["head_block_producer"] == "defproducerh", "setprods should have taken effect"
-    assert cluster.getNode(4).waitForBlock(setProdsBlockNum + 12 + 12 + 1), "Block of new producers not reached on irreversible node"
+    assert cluster.getNode(4).waitForBlock(setProdsBlockNum + 2 * Utils.ProducerRepetitions + 1), "Block of new producers not reached on irreversible node"
 
     Print("Set finalizers")
     nodes = [cluster.getNode(0), cluster.getNode(1), cluster.getNode(2)]
