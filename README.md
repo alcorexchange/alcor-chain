@@ -5,7 +5,70 @@ for on-chain trading: our variant of the node, with the features we think a trad
 [Spring](https://github.com/AntelopeIO/spring) v1.2.2 (Savanna consensus) and keeps its tools, APIs and light-client
 finality proofs. It is open for the Antelope community to run, review and take from.
 
-**Status: pre-release, for testnets.** Not for production. Testnet faucet: https://acc.alcor.exchange/faucet
+**Status: pre-release, for testnets.** Not for production.
+
+## Testnet
+
+| | |
+|---|---|
+| Faucet (account + test HORN) | https://acc.alcor.exchange/faucet |
+| API | https://api.acc.alcor.exchange |
+| P2P | `p2p.acc.alcor.exchange:9876` (block producers: send us your node's IP, the port is allowlisted) |
+| Chain ID | `9ae36fa71c10a5494664d3e1f9c67fba5dca35d316848a57a8df115ad306978f` |
+| Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
+| System token | `HORN` (4 decimals), contract `eosio.token` |
+| Block time | 200 ms, Savanna finality |
+| Release | [`v1.2.2-alcor-testnet.1`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.1) |
+| Chat | https://t.me/antelopecommunitychain |
+
+Wallets (Anchor, WharfKit and others): add a custom network with the chain ID and API above. Test HORN has no value.
+
+### Run a node
+
+Build from source on Ubuntu 22.04 or 24.04 (see [Build and Install from Source](#build-and-install-from-source) below):
+
+```bash
+git clone --recursive https://github.com/alcorexchange/alcor-chain.git
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_PREFIX_PATH=/usr/lib/llvm-11 ..
+make -j "$(nproc)"
+```
+
+Start it with the testnet genesis and peer with us:
+
+```bash
+nodeos --genesis-json testnet/genesis.json \
+  --plugin eosio::chain_api_plugin --plugin eosio::http_plugin \
+  --p2p-peer-address p2p.acc.alcor.exchange:9876 \
+  --chain-state-db-size-mb 16384 \
+  --max-reversible-blocks 36000
+```
+
+`--max-reversible-blocks 36000` is 2 hours at 200 ms; the default 3600 is only 12 minutes.
+
+### Become a block producer
+
+Generate fresh testnet keys on your own machine (never reuse mainnet keys) and send us only the public parts in the chat:
+
+- account owner and active keys: `cleos create key --to-console`
+- a block signing key: `cleos create key --to-console`
+- a BLS finalizer key with its proof of possession: `spring-util bls create key --to-console`
+- your node's public IP and p2p port
+
+We create the account and add you to the producer schedule and the finalizer policy. On your node, add:
+
+```ini
+producer-name = <your account>
+signature-provider = <signing public key>=KEY:<signing private key>
+signature-provider = <BLS public key>=KEY:<BLS private key>
+```
+
+### Related repositories
+
+- [system-contracts](https://github.com/alcorexchange/system-contracts): eosio.system with `setprioacts` and 200 ms block counts
+- [cdt](https://github.com/alcorexchange/cdt): CDT with the block interval and epoch as build options; contracts for this chain need it
+
 
 ## What differs from Spring 1.2.2
 
