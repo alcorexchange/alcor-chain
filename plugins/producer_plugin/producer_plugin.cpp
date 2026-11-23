@@ -569,7 +569,14 @@ public:
    bool     maybe_produce_block();
    bool     block_is_exhausted() const;
    bool     remove_expired_trxs(const fc::time_point& deadline);
+   bool     process_priority_trxs(const fc::time_point& deadline);
    bool     process_unapplied_trxs(const fc::time_point& deadline);
+   void     start_batch(const fc::time_point& deadline);
+   // a priority trx left over by the priority pass (did not fit): the regular passes leave it for the next batch
+   bool     priority_trx_in_batch(const transaction_metadata& trx) const {
+      return _batch_block && is_priority_transaction(_batch_priority_actions, trx);
+   }
+   void     run_batch(block_timestamp_type block_time);
    bool     retire_deferred_trxs(const fc::time_point& deadline);
    bool     process_incoming_trxs(const fc::time_point& deadline, unapplied_transaction_queue::iterator& itr);
 
@@ -688,6 +695,7 @@ public:
 
    eosio::chain::named_thread_pool<struct prod>      _timer_thread;
    boost::asio::deadline_timer                       _timer{_timer_thread.get_executor()};
+   boost::asio::deadline_timer                       _batch_timer{_timer_thread.get_executor()};
 
    using signature_provider_type = signature_provider_plugin::signature_provider_type;
    std::map<chain::public_key_type, signature_provider_type> _signature_providers;
@@ -707,6 +715,12 @@ public:
    // produce-block-offset is in terms of the complete round, internally use calculated value for each block of round
    fc::microseconds                                  _produce_block_cpu_effort;
    fc::time_point                                    _pending_block_deadline;
+   // Priority actions (eosio table prioacts). While the list is not empty, each block we produce takes the trxs of
+   // its slot in one batch near the end of the slot, priority ones first (start_batch / run_batch).
+   priority_actions_ptr                              _batch_priority_actions; // the list for the current batch
+   std::optional<block_timestamp_type>               _batch_block;            // block in batch mode, trxs are queued
+   bool                                              _batch_done = false;     // its batch ran; the rest waits for the next block
+   fc::microseconds                                  _last_batch_elapsed{0};
    uint32_t                                          _max_block_cpu_usage_threshold_us            = 0;
    uint32_t                                          _max_block_net_usage_threshold_bytes         = 0;
    bool                                              _disable_subjective_p2p_billing              = true;
@@ -884,6 +898,8 @@ public:
 
    void abort_block() {
       auto& chain = chain_plug->chain();
+      _batch_block.reset();
+      _batch_done = false;
 
       std::optional<std::tuple<uint32_t, account_name>> block_info;
       if( chain.is_building_block() ) {
@@ -1111,7 +1127,7 @@ public:
             return true;
          }
 
-         if (!chain.is_building_block()) {
+         if (!chain.is_building_block() || (_batch_block && !trx->is_transient())) {
             _unapplied_transactions.add_incoming(trx, api_trx, return_failure_trace, next);
             trx_tracker.cancel();
             return true;
@@ -2355,6 +2371,15 @@ producer_plugin_impl::start_block_result producer_plugin_impl::start_block() {
             return start_block_result::exhausted;
          }
 
+         if (in_producing_mode()) {
+            _batch_priority_actions = chain.get_priority_actions();
+            if (_batch_priority_actions) {
+               start_batch(preprocess_deadline);
+               repost_exhausted_transactions(preprocess_deadline);
+               return start_block_result::succeeded;
+            }
+         }
+
          // limit execution of pending incoming to once per block
          auto incoming_itr = _unapplied_transactions.incoming_begin();
 
@@ -2674,6 +2699,99 @@ producer_plugin_impl::handle_push_result(const transaction_metadata_ptr&        
    return pr;
 }
 
+// The block we produce takes the trxs of its slot in one batch, run as late as still leaves time to apply it: the
+// deadline minus the last batch's time * 1.25 + 10 ms, at most the block CPU limit + 10 ms. Until then and after it,
+// trxs only wait in the queue. So a priority trx (an order cancel) goes before every regular trx of its block,
+// whichever came first, and nothing is applied twice.
+void producer_plugin_impl::start_batch(const fc::time_point& deadline) {
+   const chain::controller& chain = chain_plug->chain();
+   _batch_block = chain.pending_block_timestamp();
+   _batch_done  = false;
+
+   const int64_t cpu_limit_us = chain.get_global_properties().configuration.max_block_cpu_usage;
+   const auto    reserve      = std::min(_last_batch_elapsed * 5 / 4, fc::microseconds(cpu_limit_us)) + fc::milliseconds(10);
+   const auto    at           = deadline - reserve;
+
+   static const boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
+   _batch_timer.expires_at(epoch + boost::posix_time::microseconds(at.time_since_epoch().count()));
+   _batch_timer.async_wait([this, block_time = *_batch_block](const boost::system::error_code& ec) {
+      if (ec == boost::asio::error::operation_aborted)
+         return;
+      app().executor().post(priority::high, exec_queue::read_write, [this, block_time]() { run_batch(block_time); });
+   });
+   fc_dlog(_log, "Block ${bt}: batch at ${at}, deadline ${d}", ("bt", *_batch_block)("at", at)("d", deadline));
+}
+
+void producer_plugin_impl::run_batch(block_timestamp_type block_time) {
+   chain::controller& chain = chain_plug->chain();
+   if (!in_producing_mode() || !chain.is_building_block() || _batch_block != block_time || _batch_done)
+      return;
+   _batch_done = true;
+
+   const auto start    = fc::time_point::now();
+   const auto deadline = _pending_block_deadline;
+   // && : if the priority pass ran out of time or block, the regular trxs wait too
+   bool       done     = process_priority_trxs(deadline) && process_unapplied_trxs(deadline);
+   if (done) {
+      auto incoming_itr = _unapplied_transactions.incoming_begin();
+      done = process_incoming_trxs(deadline, incoming_itr);
+   }
+   _last_batch_elapsed = fc::time_point::now() - start;
+   fc_dlog(_log, "Block ${bt}: batch took ${t} us${x}", ("bt", block_time)("t", _last_batch_elapsed)("x", done ? "" : ", exhausted"));
+
+   if (!done || block_is_exhausted())
+      schedule_maybe_produce_block(true);
+}
+
+// Priority trxs of every kind in the queue, in queue order, before process_unapplied_trxs and process_incoming_trxs.
+bool producer_plugin_impl::process_priority_trxs(const fc::time_point& deadline) {
+   const chain::controller& chain = chain_plug->chain();
+   const auto&              prio  = _batch_priority_actions;
+   if (!prio || _unapplied_transactions.empty())
+      return true;
+
+   const auto pending_block_num = chain.pending_block_num();
+   bool       exhausted         = false;
+   int        num_applied = 0, num_failed = 0, num_kept = 0;
+   auto       itr = _unapplied_transactions.begin();
+   while (itr != _unapplied_transactions.end()) {
+      if (!is_priority_transaction(prio, *itr->trx_meta)) {
+         ++itr;
+         continue;
+      }
+      if (should_interrupt_start_block(deadline, pending_block_num)) {
+         exhausted = true;
+         break;
+      }
+
+      try {
+         const bool  api_trx     = itr->trx_type == trx_enum_type::incoming_api;
+         auto        trx_tracker = _time_tracker.start_trx(itr->trx_meta->is_transient());
+         push_result pr          = push_transaction(deadline, itr->trx_meta, api_trx, itr->return_failure_trace, trx_tracker, itr->next);
+
+         if (pr.trx_exhausted) {
+            ++num_kept;
+            ++itr;
+         } else {
+            pr.failed ? ++num_failed : ++num_applied;
+            itr = _unapplied_transactions.erase(itr);
+         }
+         if (pr.block_exhausted) {
+            exhausted = true;
+            break;
+         }
+         continue;
+      }
+      LOG_AND_DROP();
+      ++num_failed;
+      ++itr;
+   }
+
+   fc_dlog(_log, "Processed priority transactions: applied ${a}, failed/dropped ${f}, kept ${k}",
+           ("a", num_applied)("f", num_failed)("k", num_kept));
+   return !exhausted;
+}
+
 bool producer_plugin_impl::process_unapplied_trxs(const fc::time_point& deadline) {
    bool exhausted = false;
    if (!_unapplied_transactions.empty()) {
@@ -2684,6 +2802,10 @@ bool producer_plugin_impl::process_unapplied_trxs(const fc::time_point& deadline
       auto                     itr                 = _unapplied_transactions.unapplied_begin();
       auto                     end_itr             = _unapplied_transactions.unapplied_end();
       while (itr != end_itr) {
+         if (priority_trx_in_batch(*itr->trx_meta)) {
+            ++itr;
+            continue;
+         }
          if (should_interrupt_start_block(deadline, pending_block_num)) {
             exhausted = true;
             break;
@@ -2825,6 +2947,10 @@ bool producer_plugin_impl::process_incoming_trxs(const fc::time_point& deadline,
       const chain::controller& chain             = chain_plug->chain();
       const auto               pending_block_num = chain.pending_block_num();
       while (itr != end) {
+         if (priority_trx_in_batch(*itr->trx_meta)) {
+            ++itr;
+            continue;
+         }
          if (should_interrupt_start_block(deadline, pending_block_num)) {
             exhausted = true;
             break;
