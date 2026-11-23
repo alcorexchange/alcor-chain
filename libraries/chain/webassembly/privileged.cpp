@@ -2,6 +2,7 @@
 #include <eosio/chain/webassembly/interface.hpp>
 #include <eosio/chain/global_property_object.hpp>
 #include <eosio/chain/protocol_state_object.hpp>
+#include <eosio/chain/key_types.hpp>
 #include <eosio/chain/transaction_context.hpp>
 #include <eosio/chain/resource_limits.hpp>
 #include <eosio/chain/apply_context.hpp>
@@ -60,6 +61,9 @@ namespace eosio { namespace chain { namespace webassembly {
             uint32_t sum_weights = 0;
             std::set<public_key_type> unique_keys;
             for (const auto& kw: a.keys ) {
+               EOS_ASSERT( is_block_signing_key_type(kw.key.which()), wasm_execution_error,
+                           "producer schedule includes an EM or ED key for ${account}: these keys sign transactions only, not blocks",
+                           ("account", p.producer_name) );
                EOS_ASSERT( kw.key.which() < num_supported_key_types, unactivated_key_type,
                            "Unactivated key type used in proposed producer schedule");
 

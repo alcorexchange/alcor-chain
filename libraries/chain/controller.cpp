@@ -15,6 +15,7 @@
 #include <eosio/chain/generated_transaction_object.hpp>
 #include <eosio/chain/transaction_object.hpp>
 #include <eosio/chain/genesis_intrinsics.hpp>
+#include <eosio/chain/key_types.hpp>
 #include <eosio/chain/whitelisted_intrinsics.hpp>
 #include <eosio/chain/database_header_object.hpp>
 
@@ -1684,6 +1685,11 @@ struct controller_impl {
 
    void initialize_blockchain_state(const genesis_state& genesis) {
       ilog( "Initializing new blockchain with genesis state" );
+
+      // alcor-chain: the genesis key signs the first blocks, and EM and ED keys never sign blocks
+      EOS_ASSERT( is_block_signing_key_type(genesis.initial_key.which()), misc_exception,
+                  "genesis initial_key ${k} is an EM or ED key: these keys sign transactions only, not blocks",
+                  ("k", genesis.initial_key) );
 
       // genesis state starts in legacy mode
       producer_authority_schedule initial_schedule = { 0, { producer_authority{config::system_account_name, block_signing_authority_v0{ 1, {{genesis.initial_key, 1}} } } } };

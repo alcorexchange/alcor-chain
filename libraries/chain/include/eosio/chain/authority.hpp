@@ -7,7 +7,9 @@
 
 namespace eosio { namespace chain {
 
-using shared_public_key_data = std::variant<fc::ecc::public_key_shim, fc::crypto::r1::public_key_shim, shared_string>;
+// same alternatives and indexes as public_key_type::storage_type; WA keys, of variable size, are stored packed
+using shared_public_key_data = std::variant<fc::ecc::public_key_shim, fc::crypto::r1::public_key_shim, shared_string,
+                                            fc::em::public_key_shim, fc::ed::public_key_shim>;
 
 struct shared_public_key {
    explicit shared_public_key( shared_public_key_data&& p ) :
@@ -40,11 +42,8 @@ struct shared_public_key {
          return false;
 
       return std::visit(overloaded {
-         [&](const fc::ecc::public_key_shim& k1) {
-            return k1._data == std::get<fc::ecc::public_key_shim>(rhs.pubkey)._data;
-         },
-         [&](const fc::crypto::r1::public_key_shim& r1) {
-            return r1._data == std::get<fc::crypto::r1::public_key_shim>(rhs.pubkey)._data;
+         [&]<class T>(const T& fixed_size_key) {
+            return fixed_size_key._data == std::get<T>(rhs.pubkey)._data;
          },
          [&](const shared_string& wa) {
             return wa == std::get<shared_string>(rhs.pubkey);
@@ -57,11 +56,8 @@ struct shared_public_key {
          return false;
 
       return std::visit(overloaded {
-         [&](const fc::ecc::public_key_shim& k1) {
-            return k1._data == std::get<fc::ecc::public_key_shim>(r._storage)._data;
-         },
-         [&](const fc::crypto::r1::public_key_shim& r1) {
-            return r1._data == std::get<fc::crypto::r1::public_key_shim>(r._storage)._data;
+         [&]<class T>(const T& fixed_size_key) {
+            return fixed_size_key._data == std::get<T>(r._storage)._data;
          },
          [&](const shared_string& wa) {
             fc::datastream<const char*> ds(wa.data(), wa.size());

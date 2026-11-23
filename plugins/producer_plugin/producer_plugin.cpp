@@ -3,6 +3,7 @@
 #include <eosio/producer_plugin/production_pause_vote_tracker.hpp>
 #include <eosio/chain/plugin_interface.hpp>
 #include <eosio/chain/global_property_object.hpp>
+#include <eosio/chain/key_types.hpp>
 #include <eosio/chain/generated_transaction_object.hpp>
 #include <eosio/chain/snapshot.hpp>
 #include <eosio/chain/snapshot_scheduler.hpp>
@@ -1402,6 +1403,8 @@ void producer_plugin_impl::plugin_initialize(const boost::program_options::varia
             const auto v = app().get_plugin<signature_provider_plugin>().signature_provider_for_specification(key_spec_pair);
             if (v) {
                const auto& [pubkey, provider] = *v;
+               EOS_ASSERT( is_block_signing_key_type(pubkey.which()), plugin_config_exception,
+                           "${k} is an EM or ED key: these keys sign transactions only, not blocks", ("k", pubkey) );
                _signature_providers[pubkey] = provider;
             }
             const auto bls = app().get_plugin<signature_provider_plugin>().bls_public_key_for_specification(key_spec_pair);

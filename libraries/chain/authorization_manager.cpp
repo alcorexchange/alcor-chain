@@ -11,6 +11,7 @@
 #include <eosio/chain/database_utils.hpp>
 #include <eosio/chain/protocol_state_object.hpp>
 #include <eosio/chain/deep_mind.hpp>
+#include <eosio/chain/key_types.hpp>
 
 
 namespace eosio { namespace chain {
@@ -143,6 +144,18 @@ namespace eosio { namespace chain {
       });
    }
 
+   // The keys of an authority stored in a permission: a supported key type (EM and ED from genesis), and an EM key
+   // must be a point on the curve (a K1 key is not checked, as before).
+   void authorization_manager::assert_authority_keys( const authority& auth, const char* action )const {
+      const auto num_supported_key_types = _db.get<protocol_state_object>().num_supported_key_types;
+      for( const key_weight& k : auth.keys ) {
+         EOS_ASSERT( is_supported_key_type(k.key.which(), num_supported_key_types), unactivated_key_type,
+                     "Unactivated key type used when ${action} permission", ("action", action) );
+         EOS_ASSERT( k.key.which() != em_key_type || k.key.valid(), public_key_type_exception,
+                     "EM key ${key} is not a point on secp256k1", ("key", k.key) );
+      }
+   }
+
    const permission_object& authorization_manager::create_permission( account_name account,
                                                                       permission_name name,
                                                                       permission_id_type parent,
@@ -151,9 +164,7 @@ namespace eosio { namespace chain {
                                                                       time_point initial_creation_time
                                                                     )
    {
-      for(const key_weight& k: auth.keys)
-         EOS_ASSERT(k.key.which() < _db.get<protocol_state_object>().num_supported_key_types, unactivated_key_type,
-           "Unactivated key type used when creating permission");
+      assert_authority_keys(auth, "creating");
 
       auto creation_time = initial_creation_time;
       if( creation_time == time_point() ) {
@@ -187,9 +198,7 @@ namespace eosio { namespace chain {
                                                                       time_point initial_creation_time
                                                                     )
    {
-      for(const key_weight& k: auth.keys)
-         EOS_ASSERT(k.key.which() < _db.get<protocol_state_object>().num_supported_key_types, unactivated_key_type,
-           "Unactivated key type used when creating permission");
+      assert_authority_keys(auth, "creating");
 
       auto creation_time = initial_creation_time;
       if( creation_time == time_point() ) {
@@ -216,9 +225,7 @@ namespace eosio { namespace chain {
    }
 
    void authorization_manager::modify_permission( const permission_object& permission, const authority& auth, bool is_trx_transient ) {
-      for(const key_weight& k: auth.keys)
-         EOS_ASSERT(k.key.which() < _db.get<protocol_state_object>().num_supported_key_types, unactivated_key_type,
-           "Unactivated key type used when modifying permission");
+      assert_authority_keys(auth, "modifying");
 
       _db.modify( permission, [&](permission_object& po) {
          auto dm_logger = _control.get_deep_mind_logger(is_trx_transient);

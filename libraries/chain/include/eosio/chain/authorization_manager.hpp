@@ -122,6 +122,7 @@ namespace eosio { namespace chain {
          const controller&    _control;
          chainbase::database& _db;
 
+         void             assert_authority_keys( const authority& auth, const char* action )const;
          void             check_updateauth_authorization( const updateauth& update, const vector<permission_level>& auths )const;
          void             check_deleteauth_authorization( const deleteauth& del, const vector<permission_level>& auths )const;
          void             check_linkauth_authorization( const linkauth& link, const vector<permission_level>& auths )const;
