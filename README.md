@@ -1,10 +1,11 @@
 # alcor-chain
 
-alcor-chain is an [Antelope](https://github.com/AntelopeIO) chain node built for on-chain trading. It is a fork of
-[Spring](https://github.com/AntelopeIO/spring) v1.2.2 (Savanna consensus) and keeps its tools, APIs and
-light-client finality proofs.
+alcor-chain is [Alcor](https://alcor.exchange)'s proposal for an [Antelope](https://github.com/AntelopeIO) chain built
+for on-chain trading: our variant of the node, with the features we think a trading chain needs. It is a fork of
+[Spring](https://github.com/AntelopeIO/spring) v1.2.2 (Savanna consensus) and keeps its tools, APIs and light-client
+finality proofs. It is open for the Antelope community to run, review and take from.
 
-**Status: pre-release, for testnets.** Not for production.
+**Status: pre-release, for testnets.** Not for production. Testnet faucet: https://acc.alcor.exchange/faucet
 
 ## What differs from Spring 1.2.2
 
