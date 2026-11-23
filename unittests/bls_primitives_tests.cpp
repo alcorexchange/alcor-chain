@@ -841,4 +841,48 @@ BOOST_AUTO_TEST_CASE( bls_testfpmod ) { try {
 } FC_LOG_AND_RETHROW() }
 
 
+// The expected span sizes are n * element size; with 32-bit math n = 2^27 wraps them to 0 (96 * 2^27 = 3 * 2^32),
+// so empty spans passed the check and the host reserved and read 2^27 elements. Every such call must just fail.
+BOOST_AUTO_TEST_CASE( bls_count_overflow ) { try {
+   tester c( setup_policy::preactivate_feature_and_new_bios );
+
+   const auto& tester1_account = account_name("tester1");
+   c.create_accounts( {tester1_account} );
+   c.produce_block();
+
+   const auto& pfm = c.control->get_protocol_feature_manager();
+   const auto& d = pfm.get_builtin_digest( builtin_protocol_feature_t::bls_primitives );
+   BOOST_REQUIRE( d );
+   c.preactivate_protocol_features( {*d} );
+   c.produce_block();
+
+   c.set_code( tester1_account, test_contracts::bls_primitives_test_wasm() );
+   c.set_abi( tester1_account, test_contracts::bls_primitives_test_abi().data() );
+   c.produce_block();
+
+   const uint32_t wrap = 1u << 27;
+   for( uint32_t num : {wrap, 2 * wrap, wrap + 1} ) {
+      const size_t extra = num - num / wrap * wrap; // spans sized for the wrapped count
+      c.push_action( tester1_account, "testg1wsum"_n, tester1_account, mutable_variant_object()
+         ("points", std::vector<char>(96 * extra))
+         ("scalars", std::vector<char>(32 * extra))
+         ("num", num)
+         ("res", std::vector<char>(96))
+         ("expected_error", (int32_t)return_code::failure) );
+      c.push_action( tester1_account, "testg2wsum"_n, tester1_account, mutable_variant_object()
+         ("points", std::vector<char>(192 * extra))
+         ("scalars", std::vector<char>(32 * extra))
+         ("num", num)
+         ("res", std::vector<char>(192))
+         ("expected_error", (int32_t)return_code::failure) );
+      c.push_action( tester1_account, "testpairing"_n, tester1_account, mutable_variant_object()
+         ("g1_points", std::vector<char>(96 * extra))
+         ("g2_points", std::vector<char>(192 * extra))
+         ("num", num)
+         ("res", std::vector<char>(576))
+         ("expected_error", (int32_t)return_code::failure) );
+      c.produce_block();
+   }
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_SUITE_END()

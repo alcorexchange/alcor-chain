@@ -285,7 +285,7 @@ namespace eosio::chain::webassembly {
    }
 
    int32_t interface::bls_g1_weighted_sum(span<const char> points, span<const char> scalars, const uint32_t n, span<char> result) const {
-      if(n == 0 || points.size() != n*96 ||  scalars.size() != n*32 ||  result.size() != 96)
+      if(n == 0 || points.size() != uint64_t{n}*96 ||  scalars.size() != uint64_t{n}*32 ||  result.size() != 96) // 64-bit: n*96 wraps in 32
          return return_code::failure;
 
       // Use much efficient scale for the special case of n == 1.
@@ -320,7 +320,7 @@ namespace eosio::chain::webassembly {
    }
 
    int32_t interface::bls_g2_weighted_sum(span<const char> points, span<const char> scalars, const uint32_t n, span<char> result) const {
-      if(n == 0 || points.size() != n*192 ||  scalars.size() != n*32 ||  result.size() != 192)
+      if(n == 0 || points.size() != uint64_t{n}*192 ||  scalars.size() != uint64_t{n}*32 ||  result.size() != 192) // 64-bit: n*192 wraps in 32
          return return_code::failure;
 
       // Use much efficient scale for the special case of n == 1.
@@ -355,7 +355,7 @@ namespace eosio::chain::webassembly {
    }
 
    int32_t interface::bls_pairing(span<const char> g1_points, span<const char> g2_points, const uint32_t n, span<char> result) const {
-      if(n == 0 || g1_points.size() != n*96 ||  g2_points.size() != n*192 ||  result.size() != 576)
+      if(n == 0 || g1_points.size() != uint64_t{n}*96 ||  g2_points.size() != uint64_t{n}*192 ||  result.size() != 576) // 64-bit: n*96 wraps in 32
          return return_code::failure;
       std::vector<std::tuple<bls12_381::g1, bls12_381::g2>> v;
       v.reserve(n);
