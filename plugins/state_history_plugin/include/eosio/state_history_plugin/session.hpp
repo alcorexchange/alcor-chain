@@ -12,6 +12,9 @@
 #include <boost/asio/error.hpp>
 #include <boost/beast/websocket.hpp>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 extern const char* const state_history_plugin_abi;
 
@@ -152,6 +155,9 @@ private:
                 */
                std::visit(chain::overloaded {
                   [&self]<typename GetStatusRequestV0orV1, typename = std::enable_if_t<std::is_base_of_v<get_status_request_v0, GetStatusRequestV0orV1>>>(const GetStatusRequestV0orV1&) {
+                     // a client that sends status requests and never reads the replies must not grow this without end
+                     if(self.queued_status_requests.size() >= max_queued_status_requests)
+                        throw std::runtime_error("more than " + std::to_string(max_queued_status_requests) + " unanswered status requests");
                      self.queued_status_requests.emplace_back(std::is_same_v<GetStatusRequestV0orV1, get_status_request_v1>);
                   },
                   [&self]<typename GetBlocksRequestV0orV1, typename = std::enable_if_t<std::is_base_of_v<get_blocks_request_v0, GetBlocksRequestV0orV1>>>(const GetBlocksRequestV0orV1& gbr) {
@@ -240,7 +246,7 @@ private:
                /**
                 * This lambda executes on the main thread; upon returning, the enclosing coroutine continues execution on the connection's strand
                 */
-               status_requests = std::move(self.queued_status_requests);
+               status_requests = std::exchange(self.queued_status_requests, {}); // moved-from deque is not guaranteed empty
 
                //decide what block -- if any -- to send out
                const chain::block_num_type latest_to_consider = self.current_blocks_request.irreversible_only ?
@@ -322,6 +328,7 @@ private:
 
    ///these items must only ever be touched on the main thread
    std::deque<bool>                  queued_status_requests;  //false for v0, true for v1
+   static constexpr size_t           max_queued_status_requests = 1024; //more closes the session
 
    get_blocks_request_v0             current_blocks_request;
    std::optional<bool>               current_blocks_request_v1_finality; //unset: current request is v0; set means v1; true/false is if finality requested
