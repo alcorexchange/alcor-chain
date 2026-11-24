@@ -20,7 +20,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
 | Block time | 200 ms, 30 blocks per producer round, Savanna finality |
-| Release | [`v1.2.2-alcor-testnet.1`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.1) |
+| Release | [`v1.2.2-alcor-testnet.2`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.2) |
 | Chat | https://t.me/antelopecommunitychain |
 
 Wallets (Anchor, WharfKit and others): add a custom network with the chain ID and API above. MetaMask and Phantom
@@ -33,7 +33,7 @@ server is up). It runs in Docker, so the host's compilers do not matter (Ubuntu 
 
 ```bash
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
-cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.2 && git submodule update --init --recursive
 DOCKER_BUILDKIT=1 docker build --build-arg SPRING_BUILD_JOBS=8 -f tools/reproducible.Dockerfile -o . .
 sha256sum antelope-spring_*.deb
 sudo apt install ./antelope-spring_*.deb
@@ -46,16 +46,17 @@ optimizing contract compiler that needs it: the node runs contracts on eos-vm-ji
 # not yet tried on 24.04 by us: tell us in the chat if it breaks
 sudo apt install -y build-essential cmake git libcurl4-openssl-dev libgmp-dev zlib1g-dev python3 file
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
-cd alcor-chain && git checkout v1.2.2-alcor-testnet.1 && git submodule update --init --recursive
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.2 && git submodule update --init --recursive
 mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_OC=OFF ..
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DENABLE_OC=OFF ..   # the .deb installs to /usr/bin
 make -j "$(nproc)" package          # about 4 GB of RAM per job; lower -j on a small box
 sudo apt install ./antelope-spring_*.deb
 ```
 
 On Ubuntu 22.04, LLVM 11 comes from apt and OC can stay on, see [Build and Install from Source](#build-and-install-from-source).
 
-Start it with the testnet genesis and peer with us:
+Start it with the testnet genesis and peer with us. `--genesis-json` is a command line option only: nodeos does not
+read it from `config.ini`.
 
 ```bash
 nodeos --genesis-json testnet/genesis.json \
@@ -91,8 +92,15 @@ nodeos --genesis-json testnet/genesis.json \
      '["<account>","<BLS public key>","<BLS proof of possession>"]' -p <account>@active
    ```
 
-5. Tell us in the chat. Producers are elected by votes (the schedule is the top 21 by votes, updated every minute);
-   we vote you in once your node is in sync. You produce 30 blocks (6 s) per round.
+5. Get into the schedule. Producers are elected by votes (the schedule is the top 21 by votes, updated every minute),
+   and you can vote for yourself with staked HORN; while there are fewer than 21 producers, any vote gets you in:
+
+   ```bash
+   cleos -u https://api.acc.alcor.exchange system delegatebw <account> <account> "40.0000 HORN" "40.0000 HORN"
+   cleos -u https://api.acc.alcor.exchange system voteproducer prods <account> <account>
+   ```
+
+   Tell us in the chat once you produce. You produce 30 blocks (6 s) per round.
 
 The finalizer policy is still set by hand: we add new finalizers once their nodes have run stable for a while, so a
 node that goes down costs its own slots, never the chain's finality.

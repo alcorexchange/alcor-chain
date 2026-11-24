@@ -247,7 +247,8 @@ void add_standard_transaction_options(CLI::App* cmd, string default_permission =
 }
 
 bool is_public_key_str(const std::string& potential_key_str) {
-   return boost::istarts_with(potential_key_str, "EOS") || boost::istarts_with(potential_key_str, "PUB_R1") ||  boost::istarts_with(potential_key_str, "PUB_K1") ||  boost::istarts_with(potential_key_str, "PUB_WA");
+   return boost::istarts_with(potential_key_str, "EOS") || boost::istarts_with(potential_key_str, "PUB_R1") ||  boost::istarts_with(potential_key_str, "PUB_K1") ||  boost::istarts_with(potential_key_str, "PUB_WA")
+       || boost::istarts_with(potential_key_str, "PUB_EM") || boost::istarts_with(potential_key_str, "PUB_ED");
 }
 
 class signing_keys_option {
