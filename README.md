@@ -15,7 +15,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | API | https://api.acc.alcor.exchange |
 | History API (Hyperion) | https://history.acc.alcor.exchange ([docs](https://history.acc.alcor.exchange/v2/docs)) |
 | Explorer | https://explorer.alcor.exchange/acc |
-| P2P | `p2p.acc.alcor.exchange:9876` (block producers: send us your node's IP, the port is allowlisted) |
+| P2P | `p2p.acc.alcor.exchange:9876`, `p2p2.acc.alcor.exchange:9876` (block producers: send us your node's IP, the ports are allowlisted; peer with both) |
 | Chain ID | `a23b0ec475262075fa3b99a38614e243c00275f777fce93e2d70a4f8d367e3fb` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
@@ -62,6 +62,7 @@ read it from `config.ini`.
 nodeos --genesis-json testnet/genesis.json \
   --plugin eosio::chain_api_plugin --plugin eosio::http_plugin \
   --p2p-peer-address p2p.acc.alcor.exchange:9876 \
+  --p2p-peer-address p2p2.acc.alcor.exchange:9876 \
   --chain-state-db-size-mb 16384 \
   --max-reversible-blocks 36000
 ```
