@@ -17,6 +17,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | Explorer | https://explorer.alcor.exchange/acc |
 | P2P | `p2p.acc.alcor.exchange:9876`, `p2p2.acc.alcor.exchange:9876` (block producers: send us your node's IP, the ports are allowlisted; peer with both) |
 | Community nodes | EOSUSA: open P2P `test.acc.p2p.eosusa.io:19878`, API https://test.acc.eosusa.io, snapshots https://snapshots.eosusa.io/snaps/acctestnet |
+| | Saltant (Moscow): open P2P `185.185.58.170:9878` |
 | Chain ID | `a23b0ec475262075fa3b99a38614e243c00275f777fce93e2d70a4f8d367e3fb` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
@@ -56,7 +57,7 @@ sudo apt install ./antelope-spring_*.deb
 
 On Ubuntu 22.04, LLVM 11 comes from apt and OC can stay on, see [Build and Install from Source](#build-and-install-from-source).
 
-Start it with the testnet genesis and peer with us and with the open community peer. `--genesis-json` is a command
+Start it with the testnet genesis and peer with us and with the open community peers. `--genesis-json` is a command
 line option only: nodeos does not read it from `config.ini`.
 
 ```bash
@@ -65,6 +66,7 @@ nodeos --genesis-json testnet/genesis.json \
   --p2p-peer-address p2p.acc.alcor.exchange:9876 \
   --p2p-peer-address p2p2.acc.alcor.exchange:9876 \
   --p2p-peer-address test.acc.p2p.eosusa.io:19878 \
+  --p2p-peer-address 185.185.58.170:9878 \
   --chain-state-db-size-mb 16384 \
   --max-reversible-blocks 36000
 ```
@@ -75,7 +77,7 @@ To skip the sync from genesis, start from a snapshot instead (EOSUSA's, above): 
 `--genesis-json testnet/genesis.json` with `--snapshot <file>.bin` on the first start, with an empty data directory.
 
 From some networks (we saw it from Russia) connections to our P2P ports, which are on Hetzner, stall after the first
-~16 KB: the node connects but never syncs. Peer through `test.acc.p2p.eosusa.io:19878` then.
+~16 KB: the node connects but never syncs. Peer through the community nodes then (`185.185.58.170:9878` is in Moscow).
 
 ### Become a block producer
 
