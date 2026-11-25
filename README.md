@@ -16,6 +16,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | History API (Hyperion) | https://history.acc.alcor.exchange ([docs](https://history.acc.alcor.exchange/v2/docs)) |
 | Explorer | https://explorer.alcor.exchange/acc |
 | P2P | `p2p.acc.alcor.exchange:9876`, `p2p2.acc.alcor.exchange:9876` (block producers: send us your node's IP, the ports are allowlisted; peer with both) |
+| Community nodes | EOSUSA: open P2P `test.acc.p2p.eosusa.io:19878`, API https://test.acc.eosusa.io, snapshots https://snapshots.eosusa.io/snaps/acctestnet |
 | Chain ID | `a23b0ec475262075fa3b99a38614e243c00275f777fce93e2d70a4f8d367e3fb` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
@@ -55,19 +56,26 @@ sudo apt install ./antelope-spring_*.deb
 
 On Ubuntu 22.04, LLVM 11 comes from apt and OC can stay on, see [Build and Install from Source](#build-and-install-from-source).
 
-Start it with the testnet genesis and peer with us. `--genesis-json` is a command line option only: nodeos does not
-read it from `config.ini`.
+Start it with the testnet genesis and peer with us and with the open community peer. `--genesis-json` is a command
+line option only: nodeos does not read it from `config.ini`.
 
 ```bash
 nodeos --genesis-json testnet/genesis.json \
   --plugin eosio::chain_api_plugin --plugin eosio::http_plugin \
   --p2p-peer-address p2p.acc.alcor.exchange:9876 \
   --p2p-peer-address p2p2.acc.alcor.exchange:9876 \
+  --p2p-peer-address test.acc.p2p.eosusa.io:19878 \
   --chain-state-db-size-mb 16384 \
   --max-reversible-blocks 36000
 ```
 
 `--max-reversible-blocks 36000` is 2 hours at 200 ms; the default 3600 is only 12 minutes.
+
+To skip the sync from genesis, start from a snapshot instead (EOSUSA's, above): unpack it and replace
+`--genesis-json testnet/genesis.json` with `--snapshot <file>.bin` on the first start, with an empty data directory.
+
+From some networks (we saw it from Russia) connections to our P2P ports, which are on Hetzner, stall after the first
+~16 KB: the node connects but never syncs. Peer through `test.acc.p2p.eosusa.io:19878` then.
 
 ### Become a block producer
 
@@ -88,10 +96,14 @@ nodeos --genesis-json testnet/genesis.json \
 4. Register as a producer and register your finalizer key:
 
    ```bash
-   cleos -u https://api.acc.alcor.exchange system regproducer <account> <signing public key> <url> 0
+   cleos -u https://api.acc.alcor.exchange system regproducer <account> <signing public key> <url> <location>
    cleos -u https://api.acc.alcor.exchange push action eosio regfinkey \
      '["<account>","<BLS public key>","<BLS proof of possession>"]' -p <account>@active
    ```
+
+   `<location>` orders the schedule: producers go west to east, so each one hands over to a neighbor and blocks
+   travel the shortest way. Set it to `round((longitude + 180) * 100)` of your node, 0 to 36000. For example,
+   Falkenstein (12.4° E) is 19237, New York (74.0° W) is 10600, Tokyo (139.7° E) is 31970.
 
 5. Get into the schedule. Producers are elected by votes (the schedule is the top 21 by votes, updated every minute),
    and you can vote for yourself with staked HORN; while there are fewer than 21 producers, any vote gets you in:
@@ -108,7 +120,7 @@ node that goes down costs its own slots, never the chain's finality.
 
 ### Related repositories
 
-- [system-contracts](https://github.com/alcorexchange/system-contracts): eosio.system with `setprioacts` and 200 ms block counts
+- [system-contracts](https://github.com/alcorexchange/system-contracts): eosio.system with `setprioacts`, 200 ms block counts and the schedule ordered by location
 - [cdt](https://github.com/alcorexchange/cdt): CDT with the block interval and epoch as build options; contracts for this chain need it
 - [hyperion](https://github.com/alcorexchange/hyperion), [node-abieos](https://github.com/alcorexchange/node-abieos),
   [abieos](https://github.com/alcorexchange/abieos): history API and ABI serializer with EM/ED keys and 200 ms blocks
