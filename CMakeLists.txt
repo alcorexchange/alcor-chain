@@ -1,6 +1,14 @@
 cmake_minimum_required( VERSION 3.16 )
 
 project( antelope-spring )
+
+# Install under /usr unless a prefix is given. Without this, the BoringSSL submodule
+# (libraries/libfc/libraries/boringssl/bssl/CMakeLists.txt) replaces CMake's default prefix with
+# <source>/install, and the .deb from `make package` installs there.
+if( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT )
+   set( CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Install path prefix" FORCE )
+   set( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT OFF )
+endif()
 include(CTest)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
