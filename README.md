@@ -22,40 +22,76 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
 | Block time | 200 ms, 30 blocks per producer round, Savanna finality |
-| Release | [`v1.2.2-alcor-testnet.2`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.2) |
+| Release | [`v1.2.2-alcor-testnet.3`](https://github.com/alcorexchange/alcor-chain/releases/tag/v1.2.2-alcor-testnet.3) (see [Versions](#versions)) |
 | Chat | https://t.me/antelopecommunitychain |
 
 Wallets (Anchor, WharfKit and others): add a custom network with the chain ID and API above. MetaMask and Phantom
 keys work too: the faucet makes an account for them (buttons "Use MetaMask" / "Use Phantom"). Test HORN has no value.
 
+### Versions
+
+All `v1.2.2-alcor-testnet.*` tags run the same testnet (one chain ID, no consensus change between them). Use the
+latest; a node on an older one keeps syncing.
+
+| Tag | What changed |
+|---|---|
+| `testnet.3` | `.deb` in the release (Ubuntu 22.04); `cmake` installs to `/usr` by default; the version string matches the tag (`testnet.2` binaries still report `testnet.1`) |
+| `testnet.2` | `cleos --sign-with` takes a bare `PUB_EM_...` / `PUB_ED_...` key |
+| `testnet.1` | the testnet launch |
+
+`nodeos --full-version` prints the version and the commit.
+
 ### Run a node
 
-Build the package with Spring's pinned reproducible build (a ready `.deb` in the release follows once our build
-server is up). It runs in Docker, so the host's compilers do not matter (Ubuntu 24.04 has no LLVM 11):
+**Ubuntu 22.04: install the release package.**
+
+```bash
+V=1.2.2-alcor-testnet.3
+wget https://github.com/alcorexchange/alcor-chain/releases/download/v$V/antelope-spring_$V-ubuntu22.04_amd64.deb \
+     https://github.com/alcorexchange/alcor-chain/releases/download/v$V/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo apt install ./antelope-spring_$V-ubuntu22.04_amd64.deb
+```
+
+**Any Linux with Docker: the pinned reproducible build.** The host's compilers do not matter:
 
 ```bash
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
-cd alcor-chain && git checkout v1.2.2-alcor-testnet.2 && git submodule update --init --recursive
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.3 && git submodule update --init --recursive
 DOCKER_BUILDKIT=1 docker build --build-arg SPRING_BUILD_JOBS=8 -f tools/reproducible.Dockerfile -o . .
-sha256sum antelope-spring_*.deb
 sudo apt install ./antelope-spring_*.deb
 ```
 
-Or build natively, without Docker. On Ubuntu 24.04 there is no LLVM 11, so turn off EOS VM OC, the optional
-optimizing contract compiler that needs it: the node runs contracts on eos-vm-jit, with the same results.
+**Native build.** About 4 GB of RAM per compile job, lower `-j` on a small box. The `.deb` installs to `/usr/bin`.
+
+Ubuntu 22.04:
 
 ```bash
-# not yet tried on 24.04 by us: tell us in the chat if it breaks
-sudo apt install -y build-essential cmake git libcurl4-openssl-dev libgmp-dev zlib1g-dev python3 file
+sudo apt install -y build-essential cmake git file python3 python3-numpy \
+     libcurl4-openssl-dev libgmp-dev zlib1g-dev llvm-11-dev
 git clone --recursive https://github.com/alcorexchange/alcor-chain.git
-cd alcor-chain && git checkout v1.2.2-alcor-testnet.2 && git submodule update --init --recursive
+cd alcor-chain && git checkout v1.2.2-alcor-testnet.3 && git submodule update --init --recursive
 mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DENABLE_OC=OFF ..   # the .deb installs to /usr/bin
-make -j "$(nproc)" package          # about 4 GB of RAM per job; lower -j on a small box
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/lib/llvm-11 ..
+make -j "$(nproc)" package
 sudo apt install ./antelope-spring_*.deb
 ```
 
-On Ubuntu 22.04, LLVM 11 comes from apt and OC can stay on, see [Build and Install from Source](#build-and-install-from-source).
+Ubuntu 24.04 has no LLVM 11, so build without EOS VM OC, the optional optimizing contract compiler that needs it.
+The node then runs contracts on eos-vm-jit, with the same results (not yet tried by us: tell us in the chat if it
+breaks):
+
+```bash
+sudo apt install -y build-essential cmake git file python3 libcurl4-openssl-dev libgmp-dev zlib1g-dev
+# clone and check out as above, then:
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_OC=OFF ..
+make -j "$(nproc)" package
+sudo apt install ./antelope-spring_*.deb
+```
+
+If `cmake` stops with "GMP shared library not found" or "Could NOT find ZLIB", a package from the list is missing:
+install it and run `cmake` again in an empty `build` directory.
 
 Start it with the testnet genesis and peer with us and with the open community peers. `--genesis-json` is a command
 line option only: nodeos does not read it from `config.ini`.
