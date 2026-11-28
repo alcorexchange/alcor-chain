@@ -18,6 +18,7 @@ finality proofs. It is open for the Antelope community to run, review and take f
 | P2P | `p2p.acc.alcor.exchange:9876`, `p2p2.acc.alcor.exchange:9876` (block producers: send us your node's IP, the ports are allowlisted; peer with both) |
 | Community nodes | EOSUSA: open P2P `test.acc.p2p.eosusa.io:19878`, API https://test.acc.eosusa.io, snapshots https://snapshots.eosusa.io/snaps/acctestnet |
 | | Saltant (Moscow): open P2P `185.185.58.170:9878` |
+| | EOSphere (Perth, Australia): open P2P `peer1-alcor-testnet.eosphere.io:9877`, API https://alcor-testnet.eosphere.io |
 | Chain ID | `a23b0ec475262075fa3b99a38614e243c00275f777fce93e2d70a4f8d367e3fb` |
 | Genesis | [`testnet/genesis.json`](testnet/genesis.json) |
 | System token | `HORN` (4 decimals), contract `eosio.token` |
@@ -103,6 +104,7 @@ nodeos --genesis-json testnet/genesis.json \
   --p2p-peer-address p2p2.acc.alcor.exchange:9876 \
   --p2p-peer-address test.acc.p2p.eosusa.io:19878 \
   --p2p-peer-address 185.185.58.170:9878 \
+  --p2p-peer-address peer1-alcor-testnet.eosphere.io:9877 \
   --chain-state-db-size-mb 16384 \
   --max-reversible-blocks 36000
 ```
